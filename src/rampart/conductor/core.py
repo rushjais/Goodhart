@@ -33,6 +33,7 @@ from ..events import (
     PatchRejected,
     RobustnessUpdate,
 )
+from ..metrics.agreement import baseline_agreement
 
 PROBE_RETRIES = 3  # attempts per cell before giving up on it
 PROBE_BACKOFF_S = 2.0  # linear backoff between attempts
@@ -149,6 +150,7 @@ def run_conductor(
     by_cheat = {s.cheat_type: s for s in taxonomy}
     mem = SharedMemory.new(gates, [s.cheat_type for s in taxonomy])
     probes = 0
+    baseline_emitted = False
 
     while (cell := mem.next_cell()) is not None:  # ALLOCATE (+ diversify via next_cell)
         gate, cheat_type = cell
@@ -171,6 +173,11 @@ def run_conductor(
         mem.breaches.append(rec)
         mem.status[cell] = Status.BREACHED
         emit(BreachFound(spec.name, gate, cheat_type, 1, 0, rec.example))
+
+        # The real pre-seal 'before', emitted once: naive grader accepts every breach -> 0.0.
+        if not baseline_emitted:
+            emit(RobustnessUpdate(baseline_agreement([1] * len(mem.breaches)), 1.0, probes))
+            baseline_emitted = True
 
         result = seal(gate, candidate)
         if result.sealed:
