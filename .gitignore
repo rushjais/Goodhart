@@ -63,3 +63,5 @@ rampart-submission.pdf
 
 # Local working docs (per-user, not shared)
 PLAN.md
+SKILL.md
+.claude/skills/review/SKILL.md

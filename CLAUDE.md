@@ -73,10 +73,11 @@ re-read this section.
   ordered steps), then code. You don't have to show the plan — just go.
 - **One feature, one commit.** Each capability lands on its own commit before the next starts.
   Name with `feat`/`fix`/etc.; keep messages concise. pull and review before committing anything.
-- **`PLAN.md` is the single working doc, and it IS tracked** (committed). It holds the current
-  task, a `## Deferred` backlog, a `## Decisions` log, and a `## Resume` note. No separate
-  HANDOFF / BACKLOG / DECISIONS files — fold them in. (Deviation from the source template, which
-  was built for a long-lived project; a weekend doesn't need the ceremony.)
+- **`PLAN.md` is your personal working doc, and it is NOT tracked** (gitignored — each
+  collaborator keeps their own). It holds the current task, a `## Deferred` backlog, a
+  `## Decisions` log, and a `## Resume` note. No separate HANDOFF / BACKLOG / DECISIONS files —
+  fold them in. (Deviation from the source template, which was built for a long-lived project; a
+  weekend doesn't need the ceremony.)
 - **Verify before every commit.** Run `make check` (ruff + pytest — the deterministic gate the
   hook also runs), then a self-review pass against `.claude/skills/review/SKILL.md`. Blockers fix
   before commit; minors → `## Deferred` in `PLAN.md`.
