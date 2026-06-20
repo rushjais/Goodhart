@@ -9,6 +9,7 @@ import dataclasses
 import json
 from pathlib import Path
 
+from ..agents.specialists import DEFAULT_MODEL
 from ..breadth.__main__ import build_discover_fn
 from ..breadth.loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client
 from .consequence import as_robustness_updates, run_consequence, tier_a_payload, write_tier_a
@@ -24,6 +25,11 @@ def main() -> None:
     ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
     ap.add_argument("--source", choices=["auto", "seed", "discovered"], default="auto")
     ap.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help="red-team model; a weaker/cheaper model cheats more on the same grader (SPEC §9.5)",
+    )
+    ap.add_argument(
         "--emit-events",
         action="store_true",
         help="print the robustness_update events the dashboard Tier A slot consumes",
@@ -38,7 +44,7 @@ def main() -> None:
     client = None if args.source == "seed" else maybe_client()
     if args.source == "discovered" and client is None:
         print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
-    discover_fn = build_discover_fn(client) if client is not None else None
+    discover_fn = build_discover_fn(client, model=args.model) if client is not None else None
     c = run_consequence(args.count, args.workers, discover_fn=discover_fn)
 
     if args.emit_tier_a:
