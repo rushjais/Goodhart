@@ -48,6 +48,7 @@ class TaskResult:
     agreement_before: float | None
     agreement_after: float | None
     honest_pass: float | None
+    n_held_out: int = 0  # held-out cheats measured (for the Tier A consequence points)
 
 
 @dataclass
@@ -166,6 +167,7 @@ def run_task(task, candidates: list[str] | None = None, client=None) -> TaskResu
             agreement_before=agreement(naive, held_out) if measurable else None,
             agreement_after=agreement(measured, held_out) if measurable else None,
             honest_pass=honest_pass(grader_prime, [gold]) if breaches else None,
+            n_held_out=len(held_out),
         )
     except Exception as exc:  # coverage honesty: record the failure, never crash the sweep
         return TaskResult(task.task_id, repr(exc), "error", 0, False, False, None, None, None)
