@@ -4,18 +4,19 @@
 check: lint test
 
 lint:
-	ruff format --check .
-	ruff check .
+	uv run ruff format --check .
+	uv run ruff check .
 
 test:
-	pytest -q
+	uv run pytest -q
 
 fmt:
-	ruff format .
-	ruff check --fix .
+	uv run ruff format .
+	uv run ruff check --fix .
 
 install:
 	uv sync
+	git config core.hooksPath .githooks
 
 # Run the loop with the event backend + serve the dashboard (filled in at Milestone 4).
 dev:
