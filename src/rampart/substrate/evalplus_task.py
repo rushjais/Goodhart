@@ -46,6 +46,23 @@ def load_subset(n: int) -> list[Task]:
     return [_to_task(tid, data[tid]) for tid in ids]
 
 
+def _hardness(task: Task) -> float:
+    """Tricky logic per visible test: len(canonical_solution) / len(base_input). Higher = more
+    reference logic with fewer base tests = where the standard grader is weakest relative to
+    difficulty. An OBJECTIVE proxy, not chosen for breach yield."""
+    return len(task.canonical_solution) / max(1, len(task.base_input))
+
+
+def load_hardest(n: int) -> list[Task]:
+    """Load the n hardest EvalPlus problems by `_hardness` (sparse base relative to tricky
+    logic), deterministically (ties broken by task index)."""
+    from evalplus.data import get_human_eval_plus
+
+    tasks = [_to_task(tid, rec) for tid, rec in get_human_eval_plus().items()]
+    tasks.sort(key=lambda t: (-_hardness(t), int(t.task_id.split("/")[1])))
+    return tasks[:n]
+
+
 def expected_outputs(task: Task, inputs: list) -> list:
     """Run the gold (prompt + canonical_solution) over `inputs`; return expected outputs.
 

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from ..agents.specialists import EDGE_SLIPPER, FORGER, run_specialist
 from ..loop.interface import make_workdir, run_grader
+from ..substrate import load_hardest
 from .loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client, run_breadth
 
 # Solution-level cheat specialists. SAPPER (harness tampering) is intentionally excluded:
@@ -55,13 +56,20 @@ def main() -> None:
         default="auto",
         help="auto: red agent if ANTHROPIC_API_KEY set, else seed; discovered: require the agent",
     )
+    ap.add_argument(
+        "--hardest",
+        type=int,
+        default=None,
+        help="run the N hardest tasks (tricky logic / sparse base) instead of the first --count",
+    )
     args = ap.parse_args()
 
     client = None if args.source == "seed" else maybe_client()
     if args.source == "discovered" and client is None:
         print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
     discover_fn = build_discover_fn(client) if client is not None else None
-    r = run_breadth(args.count, args.workers, discover_fn=discover_fn)
+    tasks = load_hardest(args.hardest) if args.hardest else None
+    r = run_breadth(args.count, args.workers, discover_fn=discover_fn, tasks=tasks)
 
     print("RAMPART — Milestone 2: breadth across EvalPlus (HumanEval)")
     note = "  (generic input-memorizing cheat; red agent not wired)" if r.source == "seed" else ""

@@ -169,19 +169,22 @@ def run_breadth(
     workers: int = DEFAULT_WORKERS,
     candidates_by_task: dict | None = None,
     discover_fn=None,
+    tasks: list | None = None,
 ) -> BreadthReport:
-    """Run the M1 loop across the first n_tasks EvalPlus problems and aggregate.
+    """Run the M1 loop across an EvalPlus slice and aggregate.
 
-    With a `discover_fn` (supplied by the engine/CLI), breaches are discovered by the red swarm
-    per task (non-deterministic); without one, the deterministic seed forger is used (labeled).
+    `tasks` (e.g. load_hardest(n)) overrides the default first-n_tasks slice. With a `discover_fn`
+    (supplied by the engine/CLI), breaches are discovered by the red swarm per task
+    (non-deterministic); without one, the deterministic seed forger is used (labeled).
     """
-    tasks = load_subset(n_tasks)
+    selected = load_subset(n_tasks) if tasks is None else tasks
+    n_requested = n_tasks if tasks is None else len(selected)
     by_task = candidates_by_task or {}
-    results: list = [None] * len(tasks)
+    results: list = [None] * len(selected)
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         index = {
             pool.submit(run_task, t, by_task.get(t.task_id), discover_fn): i
-            for i, t in enumerate(tasks)
+            for i, t in enumerate(selected)
         }
         for fut in concurrent.futures.as_completed(index):
             results[index[fut]] = fut.result()
@@ -201,8 +204,8 @@ def run_breadth(
 
     return BreadthReport(
         source=source,
-        n_requested=n_tasks,
-        n_loaded=len(tasks),
+        n_requested=n_requested,
+        n_loaded=len(selected),
         n_failed=n_failed,
         n_breachable=n_breachable,
         n_measurable=len(measurable),

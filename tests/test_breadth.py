@@ -136,6 +136,21 @@ def test_no_discover_fn_falls_back_to_seed():
     assert run_task(load_subset(1)[0]).source == "seed"
 
 
+def test_load_hardest_is_a_deterministic_hard_slice():
+    from rampart.substrate import load_hardest
+
+    hard = load_hardest(5)
+    assert len(hard) == 5
+    assert [t.task_id for t in hard] == [t.task_id for t in load_hardest(5)]  # deterministic
+
+
+def test_run_breadth_accepts_an_explicit_task_slice():
+    from rampart.substrate import load_hardest
+
+    report = run_breadth(workers=2, tasks=load_hardest(2))  # seed source on the hard slice
+    assert report.n_loaded == 2
+
+
 class _ScriptedTamper:
     """Fake client: neuters test_visible.py (harness tamper) and leaves solution.py the stub."""
 
