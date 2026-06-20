@@ -42,6 +42,9 @@ class EventBus:
     def __init__(self) -> None:
         self._subscribers: set[asyncio.Queue[dict]] = set()
         self._backlog: list[dict] = []
+        # Set on the first subscribe — lets replay wait for the dashboard so the
+        # demo always plays the attack from move zero, not a mid-run backlog dump.
+        self.connected = asyncio.Event()
 
     def emit(self, event: Event) -> None:
         """Serialize once, append to the backlog, fan out to every connected client."""
@@ -56,6 +59,7 @@ class EventBus:
         for wire in self._backlog:
             queue.put_nowait(wire)
         self._subscribers.add(queue)
+        self.connected.set()
         return queue
 
     def unsubscribe(self, queue: asyncio.Queue[dict]) -> None:

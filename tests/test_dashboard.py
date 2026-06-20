@@ -26,6 +26,13 @@ def test_dashboard_is_served_at_root():
     assert "GOODHART" in resp.text
 
 
+def test_capability_json_404s_until_a_run_is_recorded():
+    # No capability_run.json committed → Tier B slot must stay hidden (404 contract).
+    with TestClient(create_app(EventBus())) as client:
+        resp = client.get("/capability.json")
+    assert resp.status_code == 404
+
+
 def test_dashboard_handles_every_seam2_event_type():
     html = DASHBOARD.read_text()
     for tag in SEAM2_TAGS:

@@ -1,7 +1,10 @@
 <!doctype html>
 <!-- Goodhart siege dashboard — single file, no build step. Animates purely off the Seam 2
      websocket stream. The numbers lead; the siege serves the numbers. Nothing is hardcoded:
-     every figure is derived from robustness_update / breach_found / agent_killed events. -->
+     every figure is derived from robustness_update / breach_found / agent_killed events.
+     The swarm's intelligence is visible, not decorative: agents flow toward the soft gate
+     and their paths bow around already-turreted (hardened) gates instead of walking through.
+     Tier B capability chart is a hidden slot that only appears if /capability.json exists. -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -34,7 +37,6 @@
   .hero .num { font-size:64px; font-weight:800; line-height:1; letter-spacing:-.02em;
                font-variant-numeric:tabular-nums; transition:color .4s; }
   .hero .num.good { color:var(--good); }
-  .hero .num small { font-size:26px; font-weight:700; color:var(--muted); }
   .hero .cap { color:var(--muted); font-size:12px; margin-top:7px; max-width:230px; text-transform:uppercase; letter-spacing:.06em; }
   .hero .delta { font-size:13px; margin-top:5px; color:var(--muted); font-variant-numeric:tabular-nums; }
   .hero .delta b { color:var(--good); }
@@ -45,7 +47,7 @@
   main { display:grid; grid-template-columns:1fr 270px; gap:0; height:calc(100vh - 168px); }
   .stage { position:relative; }
   svg { width:100%; height:100%; display:block; }
-  .side { border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; }
+  .side { border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; overflow:hidden; }
   .side h2 { font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
              margin:0; padding:14px 16px 8px; }
   .pins { padding:0 16px 12px; display:flex; flex-wrap:wrap; gap:7px; }
@@ -60,12 +62,32 @@
   .row.reject { border-color:var(--warn); } .row.kill { border-color:var(--good); }
   .row.robust { border-color:#5a8dff; }
 
+  /* Tier B capability slot — hidden until a real recorded run is present. */
+  .tierb { border-top:1px solid var(--line); padding-bottom:12px; }
+  .tierb h2 .rec { color:var(--good); border:1px solid var(--good); border-radius:4px;
+                   padding:1px 5px; font-size:9px; margin-left:6px; letter-spacing:.08em; }
+  .tb-chart { padding:4px 16px 6px; }
+  .tb-row { margin:9px 0; }
+  .tb-lbl { font-size:11px; color:var(--muted); margin-bottom:3px; }
+  .tb-track { display:flex; align-items:center; gap:8px; }
+  .tb-bar { height:14px; border-radius:3px; min-width:2px; transition:width .8s; }
+  .tb-bar.good { background:var(--good); } .tb-bar.bad { background:var(--bad); }
+  .tb-val { font-size:12px; font-variant-numeric:tabular-nums; }
+  .tb-src { padding:2px 16px; font-size:10px; color:var(--muted); }
+
   /* siege elements */
-  .gate-arch { fill:#0c1322; stroke:#3a4a6a; }
-  .agent { transition:transform 1.1s cubic-bezier(.5,0,.3,1), opacity .6s; }
-  .agent.dead { opacity:0; transform:translateY(26px) scale(.6); }
+  .gate-arch { fill:#0c1322; stroke:#3a4a6a; transition:opacity .5s; }
+  .gate.hardened .gate-arch { opacity:.4; }
+  .agent { transition:opacity .6s, transform .6s; }
   .agent-body { fill:var(--bad); }
   .agent-lbl { fill:var(--muted); font-size:10px; text-anchor:middle; }
+  .flow-trail { fill:none; stroke:var(--bad); stroke-width:2; stroke-dasharray:5 7;
+                opacity:.0; animation:trail 1.5s ease-out forwards; }
+  @keyframes trail { 0%{opacity:0;} 18%{opacity:.55;} 100%{opacity:0;} }
+  .beacon { animation:bpulse 1.1s ease-in-out infinite; }
+  @keyframes bpulse { 0%,100%{opacity:.35; transform:translateY(0);} 50%{opacity:1; transform:translateY(-4px);} }
+  .shield { fill:none; stroke:var(--good); stroke-width:2.5; opacity:0; animation:shieldin .6s forwards; }
+  @keyframes shieldin { from{opacity:0;} to{opacity:.8;} }
   .turret { opacity:0; transform-origin:center; animation:rise .5s forwards; }
   @keyframes rise { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
   .turret.torn { animation:fall .8s forwards; }
@@ -116,14 +138,14 @@
         </radialGradient>
       </defs>
       <rect width="1000" height="560" fill="url(#sky)"/>
-      <!-- ground -->
       <rect y="430" width="1000" height="130" fill="#0c1120"/>
-      <!-- castle wall -->
       <rect x="60" y="250" width="880" height="180" fill="#171f33" stroke="#26304d"/>
       <g id="battlements"></g>
       <text x="500" y="240" text-anchor="middle" fill="#56627f" style="font-size:12px;letter-spacing:.2em">THE GRADER</text>
+      <g id="trails"></g>
       <g id="gates"></g>
       <g id="turrets"></g>
+      <g id="beacons"></g>
       <g id="shots"></g>
       <g id="agents"></g>
     </svg>
@@ -132,6 +154,11 @@
   <div class="side">
     <h2>Intel map</h2>
     <div class="pins" id="pins"></div>
+    <div id="tierb" class="tierb" hidden>
+      <h2>Tier B · capability beat<span class="rec">recorded</span></h2>
+      <div class="tb-chart" id="tb-chart"></div>
+      <div class="tb-src" id="tb-src"></div>
+    </div>
     <h2>Siege log</h2>
     <div class="log" id="log"></div>
   </div>
@@ -142,8 +169,7 @@ const SVGNS = "http://www.w3.org/2000/svg";
 const $ = (id) => document.getElementById(id);
 const pct = (x) => Math.round(x * 100) + "%";
 
-// battlements (cosmetic)
-(() => {
+(() => {  // battlements (cosmetic)
   const g = $("battlements");
   for (let x = 60; x < 940; x += 55) {
     const r = document.createElementNS(SVGNS, "rect");
@@ -154,43 +180,101 @@ const pct = (x) => Math.round(x * 100) + "%";
   }
 })();
 
-const SLOTS = [220, 400, 580, 760];          // gate x positions by order of appearance
-const gates = {};                             // id -> {x, status, info}
-const agents = {};                            // id -> {el, x}
-const robustHistory = [];                     // robustness_update values, in order
-let breaches = 0, sealed = 0;
+const SLOTS = [220, 420, 620, 820];   // gate x positions, by order of appearance
+const SPAWN_Y = 505, FRONT_Y = 468;   // agent rows: muster line, and the wall front
+const gates = {};                      // id -> {x, status, glow, gateEl, crowd}
+const agents = {};                     // id -> {el, x, y, gate}
+const robustHistory = [];
+let breaches = 0, sealed = 0, softSpot = null;
 
 function gateFor(id) {
   if (gates[id]) return gates[id];
   const x = SLOTS[Object.keys(gates).length % SLOTS.length];
-  const gateG = document.createElementNS(SVGNS, "g");
-  gateG.innerHTML =
+  const g = document.createElementNS(SVGNS, "g");
+  g.setAttribute("class", "gate");
+  g.innerHTML =
     `<rect class="gate-glow" x="${x-34}" y="250" width="68" height="180" fill="#ff5d6c" opacity="0"/>
      <path class="gate-arch" d="M ${x-26} 430 V 320 A 26 26 0 0 1 ${x+26} 320 V 430 Z"/>
      <text x="${x}" y="448" text-anchor="middle" fill="#56627f" font-size="10">${id}</text>`;
-  $("gates").appendChild(gateG);
-  return (gates[id] = { x, status: "intact", glow: gateG.querySelector(".gate-glow"), info: null });
+  $("gates").appendChild(g);
+  return (gates[id] = { x, status: "intact", glow: g.querySelector(".gate-glow"), gateEl: g, crowd: 0 });
 }
 
 function addAgent(id, specialty) {
   const idx = Object.keys(agents).length;
-  const x = 130 + idx * 95, y = 500;
+  const x = 120 + idx * 76, y = SPAWN_Y;
   const g = document.createElementNS(SVGNS, "g");
   g.setAttribute("class", "agent");
   g.style.transform = `translate(${x}px,${y}px)`;
   g.innerHTML =
     `<circle class="agent-body" r="11"/>
      <path d="M -7 4 Q 0 -16 7 4 Z" fill="#ff8a93"/>
-     <text class="agent-lbl" y="26">${specialty || id}</text>`;
+     <text class="agent-lbl" y="26">${escapeHtml(specialty || id)}</text>`;
   $("agents").appendChild(g);
-  agents[id] = { el: g, x, y };
+  agents[id] = { el: g, x, y, gate: null };
+}
+
+// A quadratic path from (x0,y0)->(x1,y1) whose control point bows the route AROUND any
+// turreted gate sitting between them: the swarm visibly skips hardened gates.
+function flowControl(x0, y0, x1, y1) {
+  let cx = (x0 + x1) / 2, cy = Math.min(y0, y1) - 34;   // default: arc up toward the wall
+  const lo = Math.min(x0, x1), hi = Math.max(x0, x1);
+  let blocker = null, best = 1e9;
+  for (const id in gates) {
+    const g = gates[id];
+    if (g.status === "turreted" && g.x > lo + 8 && g.x < hi - 8) {
+      const d = Math.abs(g.x - (x0 + x1) / 2);
+      if (d < best) { best = d; blocker = g; }
+    }
+  }
+  if (blocker) { cx = blocker.x; cy = Math.max(y0, y1) + 78; }  // dip down & around the turret
+  return { cx, cy };
 }
 
 function moveAgent(id, gateId) {
   const a = agents[id]; if (!a) return;
-  const gx = gateFor(gateId).x;
-  a.x = gx; a.y = 462;
-  a.el.style.transform = `translate(${gx}px,462px)`;
+  const g = gateFor(gateId);
+  if (a.gate && gates[a.gate]) gates[a.gate].crowd = Math.max(0, gates[a.gate].crowd - 1);
+  const slot = g.crowd++;                                   // fan converging agents out
+  a.gate = gateId;
+  const tx = g.x + (slot % 2 ? 1 : -1) * (16 + 13 * Math.floor(slot / 2));
+  const ty = FRONT_Y + (slot % 2 ? 6 : 0);
+  if (g.status !== "turreted") setSoftSpot(gateId);        // mark the spot under attack
+
+  const { cx, cy } = flowControl(a.x, a.y, tx, ty);
+  const trail = document.createElementNS(SVGNS, "path");
+  trail.setAttribute("class", "flow-trail");
+  trail.setAttribute("d", `M ${a.x} ${a.y} Q ${cx} ${cy} ${tx} ${ty}`);
+  $("trails").appendChild(trail);
+  setTimeout(() => trail.remove(), 1600);
+
+  const x0 = a.x, y0 = a.y, t0 = performance.now(), DUR = 1100;
+  function frame(now) {
+    let t = Math.min(1, (now - t0) / DUR);
+    const e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;  // easeInOutQuad
+    const u = 1 - e;
+    const x = u * u * x0 + 2 * u * e * cx + e * e * tx;
+    const y = u * u * y0 + 2 * u * e * cy + e * e * ty;
+    a.el.style.transform = `translate(${x}px,${y}px)`;
+    if (t < 1) requestAnimationFrame(frame); else { a.x = tx; a.y = ty; }
+  }
+  requestAnimationFrame(frame);
+}
+
+function setSoftSpot(gateId) {
+  if (softSpot === gateId) return;
+  softSpot = gateId;
+  const b = $("beacons"); b.innerHTML = "";
+  const x = gateFor(gateId).x;
+  const m = document.createElementNS(SVGNS, "g");
+  m.setAttribute("class", "beacon");
+  m.innerHTML =
+    `<circle cx="${x}" cy="300" r="15" fill="none" stroke="#ffcf5c" stroke-width="2"/>
+     <path d="M ${x-7} 296 L ${x} 305 L ${x+7} 296" fill="none" stroke="#ffcf5c" stroke-width="2.5"/>`;
+  b.appendChild(m);
+}
+function clearSoftSpot(gateId) {
+  if (softSpot === gateId) { softSpot = null; $("beacons").innerHTML = ""; }
 }
 
 function pin(kind) {
@@ -199,15 +283,15 @@ function pin(kind) {
   $("pins").appendChild(p);
 }
 
-function turretOn(gateId) {
+function turretOn(gateId, hardened) {
   const x = gateFor(gateId).x;
   const t = document.createElementNS(SVGNS, "g");
   t.setAttribute("class", "turret");
-  t.dataset.gate = gateId;
   t.innerHTML =
     `<rect x="${x-22}" y="196" width="44" height="40" fill="#16233d" stroke="#37e0a6"/>
      <rect x="${x-26}" y="186" width="52" height="12" fill="#37e0a6"/>
-     <rect x="${x+14}" y="206" width="22" height="7" fill="#37e0a6"/>`;
+     <rect x="${x+14}" y="206" width="22" height="7" fill="#37e0a6"/>` +
+    (hardened ? `<path class="shield" d="M ${x-40} 360 A 44 44 0 0 1 ${x+40} 360"/>` : "");
   $("turrets").appendChild(t);
   return t;
 }
@@ -223,8 +307,7 @@ function fireShot(fromX, toX, toY, color) {
 }
 
 function showTip(gateId, html) {
-  const tip = $("tip");
-  const svg = $("svg"), rect = svg.getBoundingClientRect();
+  const tip = $("tip"), rect = $("svg").getBoundingClientRect();
   const x = gateFor(gateId).x / 1000 * rect.width;
   tip.innerHTML = html;
   tip.style.left = Math.min(rect.width - 310, Math.max(8, x - 40)) + "px";
@@ -237,8 +320,7 @@ function log(cls, html) {
   const row = document.createElement("div");
   row.className = "row " + cls;
   row.innerHTML = html;
-  const box = $("log");
-  box.prepend(row);
+  const box = $("log"); box.prepend(row);
   while (box.children.length > 14) box.lastChild.remove();
 }
 
@@ -252,8 +334,7 @@ function updateHeroes(u) {
   }
   $("honest").textContent = pct(u.honest_pass);
   $("honest").className = "num" + (u.honest_pass < 1 ? " warn" : "");
-  // consequence: reward reachable by cheating = 1 - agreement, derived live.
-  const exploit = 1 - u.held_out_blocked;
+  const exploit = 1 - u.held_out_blocked;            // derived live, never hardcoded
   $("exploit").textContent = pct(exploit);
   $("exploit-delta").innerHTML =
     `${breaches} breaches · ${sealed} sealed · ${u.probes} probes` +
@@ -263,7 +344,7 @@ function updateHeroes(u) {
 const HANDLERS = {
   agent_spawn(e) {
     addAgent(e.agent, e.specialty);
-    log("", `<span class="g">spawn</span> ${e.agent} <span class="g">(${e.specialty})</span>`);
+    log("", `<span class="g">spawn</span> ${e.agent} <span class="g">(${escapeHtml(e.specialty)})</span>`);
   },
   agent_move(e) {
     moveAgent(e.agent, e.gate);
@@ -278,12 +359,12 @@ const HANDLERS = {
   },
   patch_applied(e) {
     const g = gateFor(e.gate); g.status = "turreted"; g.glow.classList.remove("on");
-    turretOn(e.gate); pin("green");
-    log("patch", `<span class="g">patch</span> ${e.gate} <span class="g">— ${e.technique}</span>`);
+    g.gateEl.classList.add("hardened");
+    turretOn(e.gate, true); pin("green"); clearSoftSpot(e.gate);
+    log("patch", `<span class="g">patch</span> ${e.gate} <span class="g">— ${escapeHtml(e.technique)}</span>`);
   },
   patch_rejected(e) {
-    // over-tightened: a turret rises, shoots a friendly, flashes red, torn down.
-    const g = gateFor(e.gate), t = turretOn(e.gate);
+    const g = gateFor(e.gate), t = turretOn(e.gate, false);   // rises, fires a friendly, torn down
     fireShot(g.x, g.x - 70, 470, "#ff5d6c");
     setTimeout(() => t.classList.add("torn"), 700);
     setTimeout(() => t.remove(), 1500);
@@ -293,7 +374,10 @@ const HANDLERS = {
   agent_killed(e) {
     sealed++;
     const g = gateFor(e.gate), a = agents[e.agent];
-    if (a) { fireShot(g.x, a.x, a.y, "#37e0a6"); setTimeout(() => a.el.classList.add("dead"), 250); }
+    if (a) {
+      fireShot(g.x, a.x, a.y, "#37e0a6");
+      setTimeout(() => { a.el.style.opacity = "0"; a.el.style.transform = `translate(${a.x}px,${a.y+24}px) scale(.6)`; }, 250);
+    }
     log("kill", `<span class="g">sealed</span> ${e.gate} — ${e.agent} down`);
   },
   robustness_update(e) {
@@ -312,6 +396,31 @@ function dispatch(msg) {
   fn(msg);
 }
 
+// Tier B capability chart — appears ONLY if a real recorded run is served at /capability.json.
+// Shape: { metric, source, bars:[{label, value:0..1, kind:"leaky"|"hardened"}, ...] }
+async function loadTierB() {
+  try {
+    const r = await fetch("capability.json", { cache: "no-store" });
+    if (!r.ok) return;                                   // 404 → keep the slot hidden
+    const d = await r.json();
+    if (!d || !Array.isArray(d.bars) || !d.bars.length) return;
+    const chart = $("tb-chart"); chart.innerHTML = "";
+    const max = Math.max(...d.bars.map((b) => +b.value || 0), 1e-6);
+    for (const b of d.bars) {
+      const row = document.createElement("div"); row.className = "tb-row";
+      row.innerHTML =
+        `<div class="tb-lbl">${escapeHtml(b.label)}</div>
+         <div class="tb-track">
+           <div class="tb-bar ${b.kind === "hardened" ? "good" : "bad"}" style="width:${Math.round((+b.value || 0) / max * 100)}%"></div>
+           <div class="tb-val">${pct(+b.value || 0)}</div>
+         </div>`;
+      chart.appendChild(row);
+    }
+    $("tb-src").textContent = [d.metric, d.source].filter(Boolean).join(" · ");
+    $("tierb").hidden = false;
+  } catch (_) { /* no recorded run reachable → slot stays hidden */ }
+}
+
 function connect() {
   const ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onopen = () => { $("dot").classList.add("live"); $("conn").textContent = "live"; };
@@ -322,6 +431,7 @@ function connect() {
   };
 }
 connect();
+loadTierB();
 </script>
 </body>
 </html>

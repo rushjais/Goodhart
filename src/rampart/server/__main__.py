@@ -20,7 +20,11 @@ def main() -> None:
     bus = EventBus()
     startup = None
     if args.replay:
-        startup = ReplayPublisher(args.replay, bus, speed=args.speed).run
+        publisher = ReplayPublisher(args.replay, bus, speed=args.speed)
+
+        async def startup():
+            await bus.connected.wait()  # hold until the dashboard connects
+            await publisher.run()
     # else: the live engine (Track A/B) calls bus.emit — wired in last.
 
     print(f"siege dashboard → http://{args.host}:{args.port}")
