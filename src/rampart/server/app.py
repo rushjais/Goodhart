@@ -1,6 +1,8 @@
 """FastAPI surface: serve the single-file dashboard and stream the bus over a websocket."""
 
 import asyncio
+import sys
+import traceback
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,9 +31,26 @@ def _json_file(path: Path) -> Response:
 def create_app(bus: EventBus, startup: Callable[[], Awaitable[None]] | None = None) -> FastAPI:
     """Build the app. `startup` (e.g. a replay task) is launched on the event loop at boot."""
 
+    async def _guarded_startup() -> None:
+        # The startup task (live engine or replay) is fire-and-forget, so an exception
+        # would otherwise vanish until GC. Surface it LOUDLY so a stalled producer
+        # self-diagnoses in the terminal instead of looking like a silent freeze.
+        try:
+            await startup()
+        except asyncio.CancelledError:
+            raise  # normal shutdown
+        except Exception:
+            print(
+                "\n!! event producer crashed — the engine/replay stopped emitting.\n"
+                "   The dashboard stays up; fix the cause below and restart.\n",
+                file=sys.stderr,
+                flush=True,
+            )
+            traceback.print_exc()
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        task = asyncio.create_task(startup()) if startup else None
+        task = asyncio.create_task(_guarded_startup()) if startup else None
         yield
         if task:
             task.cancel()
