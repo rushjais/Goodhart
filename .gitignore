@@ -51,6 +51,12 @@ Thumbs.db
 runs/
 *.log
 
-# Local working docs
+# PDFs (planning/submission docs)
+rampart-hourly.pdf
+rampart-planning.pdf
+rampart-prompts.pdf
+rampart-submission.pdf
+
+# Local working docs (per-user, not shared)
 PLAN.md
 SKILL.md
