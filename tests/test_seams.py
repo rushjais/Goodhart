@@ -1,35 +1,22 @@
 """Smoke test for the locked seams: the contract imports and behaves as specified.
 
-The front half of Seam 1 (load_task, make_workdir, run_grader, is_breach) is wired to
-Track A's real impls; the back half (oracle, patch, gate, metrics) is not built yet.
+The whole loop is implemented; the seam re-exports Track A's impls as the single entrypoint.
 """
 
-import pytest
-
-from rampart import events, grader, harness, substrate
+from rampart import events, gate, grader, harness, metrics, oracle, substrate, templates
 from rampart.loop import interface
 
-# Not built yet — still contract stubs.
-NOT_BUILT = [
-    (interface.run_oracle, ("workdir",)),
-    (interface.apply_patch, ("grader", "tpl", {})),
-    (interface.regression_gate, ("grader_prime", "breach", "gold")),
-    (interface.agreement, ("grader", set())),
-    (interface.honest_pass, ("grader", set())),
-]
 
-
-@pytest.mark.parametrize("fn, args", NOT_BUILT)
-def test_unbuilt_seam_stubs_raise_not_implemented(fn, args):
-    with pytest.raises(NotImplementedError):
-        fn(*args)
-
-
-def test_wired_seam_delegates_to_real_impls():
-    # The seam IS the single entrypoint — it re-exports Track A's implementations.
+def test_seam1_delegates_to_real_impls():
+    # The seam IS the single entrypoint — it re-exports the real implementations.
     assert interface.load_task is substrate.load_task
     assert interface.make_workdir is harness.make_workdir
     assert interface.run_grader is grader.run_grader
+    assert interface.run_oracle is oracle.run_oracle
+    assert interface.apply_patch is templates.apply_patch
+    assert interface.regression_gate is gate.regression_gate
+    assert interface.agreement is metrics.agreement
+    assert interface.honest_pass is metrics.honest_pass
     assert interface.Task is substrate.Task
 
 
