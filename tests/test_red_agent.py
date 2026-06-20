@@ -73,7 +73,7 @@ def test_write_file_rejects_workdir_escape(tmp_path):
         ]
     )
 
-    result = run_red_agent(tmp_path, run_tests=lambda w: 0, client=client)
+    result = run_red_agent(tmp_path, run_tests=lambda w: 1, client=client)
 
     assert "../evil.py" not in result.files_written
     assert not (tmp_path.parent / "evil.py").exists()
