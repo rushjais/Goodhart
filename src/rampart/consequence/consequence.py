@@ -95,7 +95,11 @@ def as_robustness_updates(c: ConsequenceReport) -> list[RobustnessUpdate]:
 
 
 def run_consequence(
-    n_tasks: int = DEFAULT_COUNT, workers: int = DEFAULT_WORKERS, discover_fn=None
+    n_tasks: int = DEFAULT_COUNT, workers: int = DEFAULT_WORKERS, discover_fn=None, tasks=None
 ) -> ConsequenceReport:
-    """Run the M2 sweep on the same breach source and reduce it to the Tier A number."""
-    return measure_consequence(run_breadth(n_tasks, workers, discover_fn=discover_fn))
+    """Run the M2 sweep on the same breach source and reduce it to the Tier A number.
+
+    `tasks` (e.g. load_hardest(n)) overrides the default slice so Tier A can be captured on the
+    exact same set as the breadth breach run.
+    """
+    return measure_consequence(run_breadth(n_tasks, workers, discover_fn=discover_fn, tasks=tasks))
