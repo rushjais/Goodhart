@@ -72,6 +72,19 @@ def test_agreement_seam_before_and_after(task, report):
     assert agreement(report.grader_prime, report.held_out) == 1.0
 
 
+def test_baseline_agreement_is_the_genuine_naive_before_and_one_source():
+    from rampart import metrics
+    from rampart.loop import interface
+
+    # Single source of truth: the conductor reaches it through loop.interface (not submodules).
+    assert interface.baseline_agreement is metrics.baseline_agreement
+    # Every breach passed the naive grader (R_naive=1) -> naive blocks none -> 0.0 baseline.
+    assert metrics.baseline_agreement([1, 1, 1, 1]) == 0.0
+    assert metrics.baseline_agreement([]) == 0.0
+    # Genuinely computed from the verdicts, not a hardcoded 0: a non-breach (R=0) registers.
+    assert metrics.baseline_agreement([1, 0, 1, 0]) == 0.5
+
+
 def test_honest_pass_seam_drops_when_gold_is_rejected(task, gold, report):
     assert honest_pass(report.grader_prime, [gold]) == 1.0
     over_tightened = apply_patch(Grader(task), PRISTINE_HELDOUT, {"per_test_timeout": 0.01})

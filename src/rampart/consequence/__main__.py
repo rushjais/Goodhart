@@ -53,17 +53,20 @@ def main() -> None:
 
     print("RAMPART — Tier A: reward reachable by PURE cheating")
     print(f"  breach source : {c.source}")
-    print(f"  cheats (held-out): {c.n_cheats}")
+    print(f"  cheats (held-out): {c.n_cheats}  (over {c.n_measurable} measurable task(s))")
+    print("  baseline = standard grader runs the repo's own test file (realistic CI)")
+    print("  AFTER    = graded from a pristine read-only copy")
     print()
+    print(f"  naive    : pays {c.reward_naive_points:.0f} points ({c.reward_naive_rate:.2f}/cheat)")
     print(
-        f"  naive grader    : pays {c.reward_naive_points:.0f} points  "
-        f"({c.reward_naive_rate:.2f} / cheat)   <- the leaky reward pays for cheating"
-    )
-    print(
-        f"  hardened grader : pays {c.reward_hardened_points:.0f} points  "
-        f"({c.reward_hardened_rate:.2f} / cheat)   <- ~0"
+        f"  hardened : pays {c.reward_hardened_points:.0f} points "
+        f"({c.reward_hardened_rate:.2f}/cheat)"
     )
     print()
+    if c.n_measurable == 0:
+        print("  note: no measurable held-out cheats (e.g. harness-tamper breaches collapse to")
+        print("  one stub solution.py); the hit-rate is the headline until the breach unit")
+        print("  becomes the cheat artifact (deferred). See `python -m rampart.breadth`.")
     print(
         "  dashboard Tier A reads this from the robustness_update stream "
         "(reward = 1 - held_out_blocked)."
