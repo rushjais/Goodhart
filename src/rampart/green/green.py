@@ -59,7 +59,7 @@ class GreenResult:
 def _make_client():
     from anthropic import Anthropic
 
-    return Anthropic()
+    return Anthropic(timeout=60, max_retries=2)
 
 
 def _parse_json(text: str) -> dict:

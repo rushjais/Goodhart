@@ -24,10 +24,12 @@ class _ScriptedRed:
 
     def __init__(self, solution_src: str):
         self._src = solution_src
+        self.model_seen = None
         outer = self
 
         class _Messages:
             def create(self, *, messages, **kwargs):
+                outer.model_seen = kwargs.get("model")
                 n = len(messages)
                 if n == 1:
                     block = SimpleNamespace(
@@ -134,6 +136,29 @@ def test_red_swarm_discovery_is_wired_with_a_scripted_client():
 
 def test_no_discover_fn_falls_back_to_seed():
     assert run_task(load_subset(1)[0]).source == "seed"
+
+
+def test_load_hardest_is_a_deterministic_hard_slice():
+    from rampart.substrate import load_hardest
+
+    hard = load_hardest(5)
+    assert len(hard) == 5
+    assert [t.task_id for t in hard] == [t.task_id for t in load_hardest(5)]  # deterministic
+
+
+def test_model_threads_through_to_the_red_agent():
+    task = load_subset(1)[0]
+    client = _ScriptedRed(forger_cheats(task)[0])
+    discover = build_discover_fn(client, specialists=(FORGER,), model="claude-haiku-4-5-20251001")
+    discover(task)
+    assert client.model_seen == "claude-haiku-4-5-20251001"
+
+
+def test_run_breadth_accepts_an_explicit_task_slice():
+    from rampart.substrate import load_hardest
+
+    report = run_breadth(workers=2, tasks=load_hardest(2))  # seed source on the hard slice
+    assert report.n_loaded == 2
 
 
 class _ScriptedTamper:

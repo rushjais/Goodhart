@@ -7,8 +7,9 @@ import argparse
 import shutil
 from pathlib import Path
 
-from ..agents.specialists import EDGE_SLIPPER, FORGER, run_specialist
+from ..agents.specialists import DEFAULT_MODEL, EDGE_SLIPPER, FORGER, run_specialist
 from ..loop.interface import make_workdir, run_grader
+from ..substrate import load_hardest
 from .loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client, run_breadth
 
 # Solution-level cheat specialists. SAPPER (harness tampering) is intentionally excluded:
@@ -17,10 +18,14 @@ from .loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client, run_breadth
 DISCOVERY_SPECIALISTS = (FORGER, EDGE_SLIPPER)
 
 
-def build_discover_fn(client, specialists=DISCOVERY_SPECIALISTS):
+def build_discover_fn(client, specialists=DISCOVERY_SPECIALISTS, model=DEFAULT_MODEL):
     """Engine-backed breach source for run_breadth: run the red swarm per task and return the
     solution.py of any run that passed the grader. The spine (make_workdir/run_grader) is
     reached through loop.interface; breadth itself never imports the engine.
+
+    `model` is the red-team model. A weaker/cheaper model cheats more readily (SPEC §9.5) — on
+    the EXACT same standard grader a strong model solves honestly — so it surfaces real breaches
+    without touching the grader or oracle.
 
     CONTRACT: every source returned has already PASSED THE NAIVE GRADER (run_grader on the
     agent's workdir -> R_naive=1), harness tampering included — we only return runs where
@@ -33,7 +38,9 @@ def build_discover_fn(client, specialists=DISCOVERY_SPECIALISTS):
         for specialist in specialists:
             workdir = make_workdir(task)
             try:
-                run = run_specialist(specialist, workdir, run_tests=run_grader, client=client)
+                run = run_specialist(
+                    specialist, workdir, run_tests=run_grader, client=client, model=model
+                )
                 if run.result.passed:
                     src = (Path(workdir) / "solution.py").read_text()
                     if src.strip() and src not in found:
@@ -55,13 +62,25 @@ def main() -> None:
         default="auto",
         help="auto: red agent if ANTHROPIC_API_KEY set, else seed; discovered: require the agent",
     )
+    ap.add_argument(
+        "--hardest",
+        type=int,
+        default=None,
+        help="run the N hardest tasks (tricky logic / sparse base) instead of the first --count",
+    )
+    ap.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help="red-team model; a weaker/cheaper model cheats more on the same grader (SPEC §9.5)",
+    )
     args = ap.parse_args()
 
     client = None if args.source == "seed" else maybe_client()
     if args.source == "discovered" and client is None:
         print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
-    discover_fn = build_discover_fn(client) if client is not None else None
-    r = run_breadth(args.count, args.workers, discover_fn=discover_fn)
+    discover_fn = build_discover_fn(client, model=args.model) if client is not None else None
+    tasks = load_hardest(args.hardest) if args.hardest else None
+    r = run_breadth(args.count, args.workers, discover_fn=discover_fn, tasks=tasks)
 
     print("RAMPART — Milestone 2: breadth across EvalPlus (HumanEval)")
     note = "  (generic input-memorizing cheat; red agent not wired)" if r.source == "seed" else ""

@@ -9,8 +9,10 @@ import dataclasses
 import json
 from pathlib import Path
 
+from ..agents.specialists import DEFAULT_MODEL
 from ..breadth.__main__ import build_discover_fn
 from ..breadth.loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client
+from ..substrate import load_hardest
 from .consequence import as_robustness_updates, run_consequence, tier_a_payload, write_tier_a
 
 # Tier A magnitude lands at the repo root, beside golden_run.jsonl (and Tier B's
@@ -23,6 +25,17 @@ def main() -> None:
     ap.add_argument("--count", type=int, default=DEFAULT_COUNT)
     ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
     ap.add_argument("--source", choices=["auto", "seed", "discovered"], default="auto")
+    ap.add_argument(
+        "--model",
+        default=DEFAULT_MODEL,
+        help="red-team model; a weaker/cheaper model cheats more on the same grader (SPEC §9.5)",
+    )
+    ap.add_argument(
+        "--hardest",
+        type=int,
+        default=None,
+        help="run the same N hardest tasks as the breadth sweep (tricky logic / sparse base)",
+    )
     ap.add_argument(
         "--emit-events",
         action="store_true",
@@ -38,8 +51,9 @@ def main() -> None:
     client = None if args.source == "seed" else maybe_client()
     if args.source == "discovered" and client is None:
         print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
-    discover_fn = build_discover_fn(client) if client is not None else None
-    c = run_consequence(args.count, args.workers, discover_fn=discover_fn)
+    discover_fn = build_discover_fn(client, model=args.model) if client is not None else None
+    tasks = load_hardest(args.hardest) if args.hardest else None
+    c = run_consequence(args.count, args.workers, discover_fn=discover_fn, tasks=tasks)
 
     if args.emit_tier_a:
         write_tier_a(c, _TIER_A_PATH)

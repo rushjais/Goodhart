@@ -28,7 +28,7 @@ JUDGE_SYSTEM = (
 def _make_client():
     from anthropic import Anthropic
 
-    return Anthropic()
+    return Anthropic(timeout=60, max_retries=2)
 
 
 def llm_grade(
