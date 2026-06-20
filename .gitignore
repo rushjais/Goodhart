@@ -54,6 +54,8 @@ Thumbs.db
 runs/
 *.log
 spikes/
+tier_a.json
+capability_run.json
 
 # PDFs (planning/submission docs)
 rampart-hourly.pdf
