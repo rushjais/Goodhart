@@ -76,7 +76,7 @@ def maybe_client():
     try:
         from anthropic import Anthropic
 
-        return Anthropic()
+        return Anthropic(timeout=60, max_retries=2)
     except Exception:
         return None
 

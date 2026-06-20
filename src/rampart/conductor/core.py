@@ -14,7 +14,11 @@ Probe / verify / seal / regrade are INJECTED so the engine is pure and determini
 
 from __future__ import annotations
 
+import sys
+import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as _FutureTimeout
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -29,6 +33,32 @@ from ..events import (
     PatchRejected,
     RobustnessUpdate,
 )
+
+PROBE_RETRIES = 3  # attempts per cell before giving up on it
+PROBE_BACKOFF_S = 2.0  # linear backoff between attempts
+PROBE_TIMEOUT_S = 90.0  # hard wall-clock cap per probe (outer bound over SDK retries)
+
+
+def _probe_resilient(probe, gate, spec):
+    """Probe with timeout + retries. Returns a candidate or None — never raises,
+    so a transient API error/timeout skips this cell instead of aborting the loop."""
+    for attempt in range(1, PROBE_RETRIES + 1):
+        try:
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                return ex.submit(probe, gate, spec).result(timeout=PROBE_TIMEOUT_S)
+        except _FutureTimeout:
+            reason = f"timeout >{PROBE_TIMEOUT_S:.0f}s"
+        except Exception as exc:  # 429 / 5xx / parse error / etc.
+            reason = f"{type(exc).__name__}: {exc}"
+        if attempt < PROBE_RETRIES:
+            time.sleep(PROBE_BACKOFF_S * attempt)
+        else:
+            print(
+                f"probe {gate}/{spec.cheat_type} gave up after {attempt}: {reason}",
+                file=sys.stderr,
+                flush=True,
+            )
+    return None
 
 
 class Status(StrEnum):
@@ -128,9 +158,9 @@ def run_conductor(
         mem.status[cell] = Status.PROBING
         probes += 1
 
-        candidate = probe(gate, spec)
+        candidate = _probe_resilient(probe, gate, spec)
         if not candidate:
-            mem.status[cell] = Status.DEAD
+            mem.status[cell] = Status.DEAD  # flaky/timeout/no-breach → skip cell, keep going
             continue
 
         if not verify(gate, candidate):  # GATEKEEP — don't let a shaky finding spread

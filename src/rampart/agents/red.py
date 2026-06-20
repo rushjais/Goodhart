@@ -115,7 +115,7 @@ def _dispatch(
 def _make_client():
     from anthropic import Anthropic
 
-    return Anthropic()  # reads ANTHROPIC_API_KEY
+    return Anthropic(timeout=60, max_retries=2)  # reads ANTHROPIC_API_KEY
 
 
 def run_red_agent(
