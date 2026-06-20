@@ -13,9 +13,17 @@ from rampart.server.bus import EventBus
 # Resolved relative to the package, not the cwd, so the server runs from anywhere.
 _ROOT = Path(__file__).resolve().parents[3]
 _DASHBOARD = _ROOT / "dashboard" / "index.html"
-# Tier B capability chart data — present ONLY after a real two-model run is recorded.
-# Absent (the default) → /capability.json 404s → the dashboard keeps the slot hidden.
+# Two SEPARATE optional side-channel files (never shared), each 404s until written:
+#   tier_a.json         — Track A's reward-points magnitude (the spoken-consequence line)
+#   capability_run.json — Tier B's trained two-model chart
+_TIER_A = _ROOT / "tier_a.json"
 _CAPABILITY = _ROOT / "capability_run.json"
+
+
+def _json_file(path: Path) -> Response:
+    if path.exists():
+        return Response(path.read_text(), media_type="application/json")
+    return Response(status_code=404)  # absent → dashboard keeps that piece hidden
 
 
 def create_app(bus: EventBus, startup: Callable[[], Awaitable[None]] | None = None) -> FastAPI:
@@ -34,11 +42,13 @@ def create_app(bus: EventBus, startup: Callable[[], Awaitable[None]] | None = No
     async def index() -> HTMLResponse:
         return HTMLResponse(_DASHBOARD.read_text())
 
+    @app.get("/tier_a.json")
+    async def tier_a() -> Response:
+        return _json_file(_TIER_A)  # Track A's reward-points magnitude
+
     @app.get("/capability.json")
     async def capability() -> Response:
-        if _CAPABILITY.exists():
-            return Response(_CAPABILITY.read_text(), media_type="application/json")
-        return Response(status_code=404)  # no recorded run yet → slot stays hidden
+        return _json_file(_CAPABILITY)  # Tier B trained chart
 
     @app.websocket("/ws")
     async def stream(websocket: WebSocket) -> None:

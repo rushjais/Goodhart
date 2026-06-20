@@ -434,38 +434,46 @@ function dispatch(msg) {
   fn(msg);
 }
 
-// /capability.json — a frozen SIDE-CHANNEL file (NOT a Seam 2 event) that Track A writes.
-// Carries two optional things; absent file or absent key → that piece stays hidden and the
-// headline rate above is the fallback. Reading it never affects the always-on derived rate.
-//   tier_a: Track A's reward-points MAGNITUDE — the spoken-consequence value.
-//   tier_b: the trained two-model chart (optional richer overlay).
-async function loadCapability() {
+// Two SEPARATE side-channel files (never shared); each 404s until written, leaving the
+// always-on derived rate above as the fallback. Neither affects the rate.
+//   /tier_a.json      — Track A's reward-points MAGNITUDE (the spoken-consequence value)
+//   /capability.json  — Tier B's trained two-model chart (optional richer overlay)
+async function loadTierAMagnitude() {
   try {
-    const r = await fetch("capability.json", { cache: "no-store" });
+    const r = await fetch("tier_a.json", { cache: "no-store" });
     if (!r.ok) return;                                   // no file → rate-only
-    const d = await r.json();
-    const mag = readTierAMagnitude(d);
-    if (mag) renderTierAMagnitude(mag);
-    const tb = d.tier_b || (Array.isArray(d.bars) ? d : null);   // nested or legacy-flat
-    if (tb && Array.isArray(tb.bars) && tb.bars.length) renderTierB(tb);
-  } catch (_) { /* unreachable/malformed → fall back to the derived rate */ }
+    const m = readTierAMagnitude(await r.json());
+    if (m) renderTierAMagnitude(m);
+  } catch (_) { /* unreachable/malformed → derived rate stands */ }
 }
 
-// STUB — PENDING RAYAN's exact field names. Swap the two field reads below when they land;
-// nothing else changes. Expected: total reward a pure-cheating policy banks, naive vs hardened.
+async function loadTierB() {
+  try {
+    const r = await fetch("capability.json", { cache: "no-store" });
+    if (!r.ok) return;
+    const d = await r.json();
+    const tb = d.tier_b || (Array.isArray(d.bars) ? d : null);   // nested or legacy-flat
+    if (tb && Array.isArray(tb.bars) && tb.bars.length) renderTierB(tb);
+  } catch (_) { /* no chart → Tier B stays hidden */ }
+}
+
+// Track A's schema (consequence.tier_a_payload): reward points a pure-cheating policy banks.
 function readTierAMagnitude(d) {
   const t = d.tier_a;
   if (!t) return null;
-  const naive = t.naive, hardened = t.hardened;          // <-- one-line drop-in: real field names
+  const naive = t.naive_points, hardened = t.hardened_points;
   if (typeof naive !== "number" || typeof hardened !== "number") return null;
-  return { naive, hardened, unit: t.unit || "reward pts" };
+  return { naive, hardened, source: t.source, n: t.n_measurable };
 }
 
 function renderTierAMagnitude(m) {
   const fmt = (n) => (+n).toLocaleString();
-  $("ta-mag").innerHTML =
-    `<span class="lbl">pure-cheat reward banked (${escapeHtml(m.unit)})</span>` +
+  let html =
+    `<span class="lbl">pure-cheat reward banked (reward points)</span>` +
     `naive <b class="bad">${fmt(m.naive)}</b> &nbsp;→&nbsp; hardened <b class="good">${fmt(m.hardened)}</b>`;
+  const cap = [m.source, m.n != null ? `${m.n} held-out cheats` : null].filter(Boolean).join(" · ");
+  if (cap) html += `<div style="font-size:10px;color:var(--muted);margin-top:3px">${escapeHtml(cap)}</div>`;
+  $("ta-mag").innerHTML = html;
   $("ta-mag").hidden = false;
 }
 
@@ -488,7 +496,8 @@ function connect() {
   };
 }
 connect();
-loadCapability();
+loadTierAMagnitude();
+loadTierB();
 </script>
 </body>
 </html>

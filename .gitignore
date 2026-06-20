@@ -66,3 +66,7 @@ PLAN.md
 SKILL.md
 .claude/skills/review/SKILL.md
 .gstack/
+
+# Generated runtime artifacts (engine-written side-channels for the dashboard)
+tier_a.json
+capability_run.json
