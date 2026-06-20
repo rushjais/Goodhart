@@ -19,19 +19,31 @@ class Task:
     canonical_solution: str  # gold body (held out — never written to the workdir)
 
 
+def _to_task(task_id: str, record: dict) -> Task:
+    return Task(
+        task_id=task_id,
+        prompt=record["prompt"],
+        entry_point=record["entry_point"],
+        base_input=record["base_input"],
+        plus_input=record["plus_input"],
+        canonical_solution=record["canonical_solution"],
+    )
+
+
 def load_task(task_id: str) -> Task:
     """Load one EvalPlus problem by task_id (downloads/caches on first call)."""
     from evalplus.data import get_human_eval_plus
 
-    p = get_human_eval_plus()[task_id]
-    return Task(
-        task_id=task_id,
-        prompt=p["prompt"],
-        entry_point=p["entry_point"],
-        base_input=p["base_input"],
-        plus_input=p["plus_input"],
-        canonical_solution=p["canonical_solution"],
-    )
+    return _to_task(task_id, get_human_eval_plus()[task_id])
+
+
+def load_subset(n: int) -> list[Task]:
+    """Load the first n EvalPlus problems (by task index), loading the dataset once."""
+    from evalplus.data import get_human_eval_plus
+
+    data = get_human_eval_plus()
+    ids = sorted(data, key=lambda k: int(k.split("/")[1]))[:n]
+    return [_to_task(tid, data[tid]) for tid in ids]
 
 
 def expected_outputs(task: Task, inputs: list) -> list:
