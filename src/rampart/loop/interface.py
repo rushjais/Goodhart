@@ -14,7 +14,7 @@ from ..gate import regression_gate
 from ..grader.runner import run_grader
 from ..grader.spec import Grader
 from ..harness.workdir import make_workdir
-from ..metrics import agreement, honest_pass
+from ..metrics import agreement, baseline_agreement, honest_pass
 from ..oracle import run_oracle
 from ..substrate.evalplus_task import Task, load_task
 from ..templates import apply_patch
@@ -30,6 +30,7 @@ __all__ = [
     "apply_patch",
     "regression_gate",
     "agreement",
+    "baseline_agreement",
     "honest_pass",
 ]
 

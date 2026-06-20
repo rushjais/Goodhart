@@ -22,7 +22,7 @@ from statistics import mean
 
 from ..gate import regression_gate
 from ..loop.interface import Grader
-from ..metrics.agreement import agreement, honest_pass
+from ..metrics.agreement import agreement, baseline_agreement, honest_pass
 from ..metrics.loop import split_breaches
 from ..substrate import expected_outputs, load_subset
 from ..suite import score_solution
@@ -145,9 +145,9 @@ def run_task(task, candidates: list[str] | None = None, discover_fn=None) -> Tas
         measurable = bool(train and held_out and accepted)
         measured = grader_prime if accepted else naive
 
-        # Every breach passed the naive grader by construction (R_naive=1), so the naive grader
-        # rejects none of them -> agreement BEFORE is 0 by definition. The pristine rebuild is
-        # the AFTER (hardened) grader, scored by agreement(measured, ...).
+        # agreement BEFORE = the naive grader's blocked-fraction, via the shared baseline source
+        # of truth. Every breach passed the naive grader by construction (R_naive=1), so the
+        # verdicts are all 1 -> 0.0. The pristine rebuild is the AFTER, scored by agreement(...).
         return TaskResult(
             task_id=task.task_id,
             error="",
@@ -155,7 +155,7 @@ def run_task(task, candidates: list[str] | None = None, discover_fn=None) -> Tas
             n_breaches=len(breaches),
             breachable=bool(breaches),
             measurable=measurable,
-            agreement_before=0.0 if measurable else None,
+            agreement_before=baseline_agreement([1] * len(held_out)) if measurable else None,
             agreement_after=agreement(measured, held_out) if measurable else None,
             honest_pass=honest_pass(grader_prime, [gold]) if breaches else None,
             n_held_out=len(held_out),
