@@ -1,0 +1,15 @@
+# Scratch / reference harness — kept on disk, never committed.
+.scratch/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.uv/
+build/
+dist/
+*.egg-info/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
