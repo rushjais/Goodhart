@@ -79,6 +79,12 @@
   .tb-bar.good { background:var(--good); } .tb-bar.bad { background:var(--bad); }
   .tb-val { font-size:12px; font-variant-numeric:tabular-nums; }
   .tb-src { padding:2px 16px; font-size:10px; color:var(--muted); }
+  /* Tier A reward-points magnitude (the spoken-consequence value) — only when /capability.json has it. */
+  .ta-mag { padding:6px 16px 2px; font-size:12.5px; color:var(--ink); line-height:1.5;
+            font-variant-numeric:tabular-nums; }
+  .ta-mag .lbl { color:var(--muted); display:block; font-size:9px; text-transform:uppercase;
+                 letter-spacing:.07em; margin-bottom:2px; }
+  .ta-mag b.good { color:var(--good); } .ta-mag b.bad { color:var(--bad); }
 
   /* siege elements */
   .gate-arch { fill:#0c1322; stroke:#3a4a6a; transition:opacity .5s; }
@@ -163,6 +169,7 @@
       <h2>Capability beat</h2>
       <div class="sub-h">Tier A · reward reachable by pure cheating<span class="live-tag">live</span></div>
       <div class="tb-chart" id="ta-chart"><div class="awaiting">awaiting first robustness reading…</div></div>
+      <div class="ta-mag" id="ta-mag" hidden></div>
       <div id="tier-b" hidden>
         <div class="sub-h">Tier B · trained two-model beat<span class="rec">recorded</span></div>
         <div class="tb-chart" id="tb-chart"></div>
@@ -427,22 +434,48 @@ function dispatch(msg) {
   fn(msg);
 }
 
-// Tier B — OPTIONAL richer overlay: the trained two-model chart. Renders ONLY if a real
-// recorded run is served at /capability.json (absent → 404 → stays hidden). Tier A above
-// is unaffected and always shows. Shape: { metric, source, bars:[{label, value:0..1, kind}] }
-async function loadTierB() {
+// /capability.json — a frozen SIDE-CHANNEL file (NOT a Seam 2 event) that Track A writes.
+// Carries two optional things; absent file or absent key → that piece stays hidden and the
+// headline rate above is the fallback. Reading it never affects the always-on derived rate.
+//   tier_a: Track A's reward-points MAGNITUDE — the spoken-consequence value.
+//   tier_b: the trained two-model chart (optional richer overlay).
+async function loadCapability() {
   try {
     const r = await fetch("capability.json", { cache: "no-store" });
-    if (!r.ok) return;                                   // 404 → keep Tier B hidden
+    if (!r.ok) return;                                   // no file → rate-only
     const d = await r.json();
-    if (!d || !Array.isArray(d.bars) || !d.bars.length) return;
-    const max = Math.max(...d.bars.map((b) => +b.value || 0), 1e-6);
-    $("tb-chart").innerHTML = d.bars
-      .map((b) => barRow(b.label, +b.value || 0, b.kind === "hardened" ? "good" : "bad", max))
-      .join("");
-    $("tb-src").textContent = [d.metric, d.source].filter(Boolean).join(" · ");
-    $("tier-b").hidden = false;
-  } catch (_) { /* no recorded run reachable → Tier B stays hidden */ }
+    const mag = readTierAMagnitude(d);
+    if (mag) renderTierAMagnitude(mag);
+    const tb = d.tier_b || (Array.isArray(d.bars) ? d : null);   // nested or legacy-flat
+    if (tb && Array.isArray(tb.bars) && tb.bars.length) renderTierB(tb);
+  } catch (_) { /* unreachable/malformed → fall back to the derived rate */ }
+}
+
+// STUB — PENDING RAYAN's exact field names. Swap the two field reads below when they land;
+// nothing else changes. Expected: total reward a pure-cheating policy banks, naive vs hardened.
+function readTierAMagnitude(d) {
+  const t = d.tier_a;
+  if (!t) return null;
+  const naive = t.naive, hardened = t.hardened;          // <-- one-line drop-in: real field names
+  if (typeof naive !== "number" || typeof hardened !== "number") return null;
+  return { naive, hardened, unit: t.unit || "reward pts" };
+}
+
+function renderTierAMagnitude(m) {
+  const fmt = (n) => (+n).toLocaleString();
+  $("ta-mag").innerHTML =
+    `<span class="lbl">pure-cheat reward banked (${escapeHtml(m.unit)})</span>` +
+    `naive <b class="bad">${fmt(m.naive)}</b> &nbsp;→&nbsp; hardened <b class="good">${fmt(m.hardened)}</b>`;
+  $("ta-mag").hidden = false;
+}
+
+function renderTierB(tb) {
+  const max = Math.max(...tb.bars.map((b) => +b.value || 0), 1e-6);
+  $("tb-chart").innerHTML = tb.bars
+    .map((b) => barRow(b.label, +b.value || 0, b.kind === "hardened" ? "good" : "bad", max))
+    .join("");
+  $("tb-src").textContent = [tb.metric, tb.source].filter(Boolean).join(" · ");
+  $("tier-b").hidden = false;
 }
 
 function connect() {
@@ -455,7 +488,7 @@ function connect() {
   };
 }
 connect();
-loadTierB();
+loadCapability();
 </script>
 </body>
 </html>
