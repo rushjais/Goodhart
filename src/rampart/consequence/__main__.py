@@ -8,6 +8,7 @@ import argparse
 import dataclasses
 import json
 
+from ..breadth.__main__ import build_discover_fn
 from ..breadth.loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client
 from .consequence import as_robustness_updates, run_consequence
 
@@ -25,7 +26,10 @@ def main() -> None:
     args = ap.parse_args()
 
     client = None if args.source == "seed" else maybe_client()
-    c = run_consequence(args.count, args.workers, client=client)
+    if args.source == "discovered" and client is None:
+        print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
+    discover_fn = build_discover_fn(client) if client is not None else None
+    c = run_consequence(args.count, args.workers, discover_fn=discover_fn)
 
     if args.emit_events:
         for ev in as_robustness_updates(c):

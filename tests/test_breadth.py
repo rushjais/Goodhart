@@ -8,8 +8,9 @@ import pytest
 
 from rampart.agents.specialists import FORGER
 from rampart.breadth import run_breadth, run_task
+from rampart.breadth.__main__ import build_discover_fn
 from rampart.breadth.cheats import forger_cheats
-from rampart.breadth.loop import _split_plus, discovered_breaches
+from rampart.breadth.loop import _split_plus
 from rampart.substrate import load_subset
 
 _N = 4
@@ -116,21 +117,18 @@ def test_discovered_breaches_swap_in_without_code_change():
 
 
 def test_red_swarm_discovery_is_wired_with_a_scripted_client():
-    """End-to-end the discovered path (no network): the red agent writes a solution, we read
-    it back, and run_task consumes it labeled 'discovered'."""
+    """End-to-end the injected discover_fn (no network): the red agent writes a solution, we
+    read it back, and run_task consumes it labeled 'discovered'."""
     task = load_subset(1)[0]
     cheat = forger_cheats(task)[0]
-    client = _ScriptedRed(cheat)
+    discover = build_discover_fn(_ScriptedRed(cheat), specialists=(FORGER,))
 
-    found = discovered_breaches(task, client=client, specialists=(FORGER,))
-    assert len(found) == 1 and found[0].strip()
+    assert len(discover(task)) == 1 and discover(task)[0].strip()
 
-    result = run_task(task, client=client)
+    result = run_task(task, discover_fn=discover)
     assert result.source == "discovered"
     assert result.breachable is True
 
 
-def test_no_client_falls_back_to_seed():
-    task = load_subset(1)[0]
-    assert discovered_breaches(task, client=None) == []
-    assert run_task(task).source == "seed"
+def test_no_discover_fn_falls_back_to_seed():
+    assert run_task(load_subset(1)[0]).source == "seed"

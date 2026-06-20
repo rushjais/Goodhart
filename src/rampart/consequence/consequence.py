@@ -72,7 +72,7 @@ def as_robustness_updates(c: ConsequenceReport) -> list[RobustnessUpdate]:
 
 
 def run_consequence(
-    n_tasks: int = DEFAULT_COUNT, workers: int = DEFAULT_WORKERS, client=None
+    n_tasks: int = DEFAULT_COUNT, workers: int = DEFAULT_WORKERS, discover_fn=None
 ) -> ConsequenceReport:
     """Run the M2 sweep on the same breach source and reduce it to the Tier A number."""
-    return measure_consequence(run_breadth(n_tasks, workers, client=client))
+    return measure_consequence(run_breadth(n_tasks, workers, discover_fn=discover_fn))

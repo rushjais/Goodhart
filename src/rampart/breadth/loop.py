@@ -2,9 +2,14 @@
 
 Per task: split plus_input into two disjoint halves — one used for hardening, the other as
 the held-out oracle — so the grader and the oracle share ZERO cases (invariant #2). Seed the
-breaches with the generic forger (or consume discovered_breaches), validate them as genuine
-(R=1 AND T=0), split train/held-out, accept a patch via the regression gate on TRAIN only,
-then measure agreement before/after on the held-out split with honest_pass beside it.
+breaches with the generic forger (or consume an injected discover_fn supplied by the
+engine/CLI), validate them as genuine (R=1 AND T=0), split train/held-out, accept a patch via
+the regression gate on TRAIN only, then measure agreement before/after on the held-out split
+with honest_pass beside it.
+
+This module is pure spine/metrics: it never imports the engine (agents). The red swarm is
+injected as `discover_fn` by the composition root (the CLI), and spine deps reach it through
+the loop.interface seam, not the engine.
 
 Tasks are independent, so they run in parallel; results are placed in task order and all
 splits are deterministic, so the aggregate is reproducible.
@@ -12,15 +17,11 @@ splits are deterministic, so the aggregate is reproducible.
 
 import concurrent.futures
 import os
-import shutil
 from dataclasses import dataclass
-from pathlib import Path
 from statistics import mean
 
-from ..agents.specialists import EDGE_SLIPPER, FORGER, run_specialist
 from ..gate import regression_gate
-from ..grader import Grader, run_grader
-from ..harness import make_workdir
+from ..loop.interface import Grader
 from ..metrics.agreement import agreement, honest_pass
 from ..metrics.loop import split_breaches
 from ..substrate import expected_outputs, load_subset
@@ -30,11 +31,6 @@ from .cheats import forger_cheats
 
 DEFAULT_COUNT = 25
 DEFAULT_WORKERS = 8
-
-# Solution-level cheat specialists. SAPPER (harness tampering) is intentionally excluded:
-# the breadth grader rebuilds the tests from a pristine copy, so harness-level cheats can't
-# survive it — only solution-level cheats register here. Diversity still comes from the agent.
-DISCOVERY_SPECIALISTS = (FORGER, EDGE_SLIPPER)
 
 
 @dataclass
@@ -85,29 +81,6 @@ def maybe_client():
         return None
 
 
-def discovered_breaches(task, client=None, specialists=DISCOVERY_SPECIALISTS) -> list[str]:
-    """Solution-level breaches found by the red swarm (Track B).
-
-    Runs each specialist against a fresh workdir; for runs that pass the grader, returns the
-    agent's solution.py source. These are genuine, agent-discovered cheats (we author no
-    exploit). Returns [] when no LLM client is available -> the sweep falls back to the seed.
-    """
-    if client is None:
-        return []
-    found: list[str] = []
-    for specialist in specialists:
-        workdir = make_workdir(task)
-        try:
-            run = run_specialist(specialist, workdir, run_tests=run_grader, client=client)
-            if run.result.passed:
-                src = (Path(workdir) / "solution.py").read_text()
-                if src.strip() and src not in found:
-                    found.append(src)
-        finally:
-            shutil.rmtree(workdir, ignore_errors=True)
-    return found
-
-
 def _split_plus(task) -> tuple[list, list]:
     """Disjoint halves of plus_input: (hardening pool, held-out oracle).
 
@@ -126,8 +99,12 @@ def _split_plus(task) -> tuple[list, list]:
     return plus_only[0::2], plus_only[1::2]
 
 
-def run_task(task, candidates: list[str] | None = None, client=None) -> TaskResult:
-    """The full M1 loop on one task. Never raises — failures are recorded honestly."""
+def run_task(task, candidates: list[str] | None = None, discover_fn=None) -> TaskResult:
+    """The full M1 loop on one task. Never raises — failures are recorded honestly.
+
+    `discover_fn(task) -> list[str]` is the engine-supplied breach source (the red swarm),
+    injected by the caller; when absent the deterministic seed forger is used.
+    """
     try:
         gold = task.prompt + task.canonical_solution
         harden_inputs, oracle_inputs = _split_plus(task)
@@ -135,8 +112,8 @@ def run_task(task, candidates: list[str] | None = None, client=None) -> TaskResu
 
         if candidates is not None:
             source = "provided"
-        elif client is not None:
-            candidates = discovered_breaches(task, client=client)  # agent-discovered cheats
+        elif discover_fn is not None:
+            candidates = discover_fn(task)  # engine-supplied (red swarm)
             source = "discovered"
         else:
             candidates = forger_cheats(task)  # labeled seed fallback
@@ -177,19 +154,20 @@ def run_breadth(
     n_tasks: int = DEFAULT_COUNT,
     workers: int = DEFAULT_WORKERS,
     candidates_by_task: dict | None = None,
-    client=None,
+    discover_fn=None,
 ) -> BreadthReport:
     """Run the M1 loop across the first n_tasks EvalPlus problems and aggregate.
 
-    With a `client`, breaches are discovered by the red swarm per task (non-deterministic,
-    needs ANTHROPIC_API_KEY); without one, the deterministic seed forger is used (labeled).
+    With a `discover_fn` (supplied by the engine/CLI), breaches are discovered by the red swarm
+    per task (non-deterministic); without one, the deterministic seed forger is used (labeled).
     """
     tasks = load_subset(n_tasks)
     by_task = candidates_by_task or {}
     results: list = [None] * len(tasks)
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
         index = {
-            pool.submit(run_task, t, by_task.get(t.task_id), client): i for i, t in enumerate(tasks)
+            pool.submit(run_task, t, by_task.get(t.task_id), discover_fn): i
+            for i, t in enumerate(tasks)
         }
         for fut in concurrent.futures.as_completed(index):
             results[index[fut]] = fut.result()
