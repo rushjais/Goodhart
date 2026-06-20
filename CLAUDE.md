@@ -3,7 +3,7 @@
 Build-time guidance for working in this repo. This file is **advisory** — it nudges, it
 doesn't enforce.
 
-> **Project:** RAMPART (working name) — an autoresearch loop that automatically hardens RL
+> **Project:** Goodhart — an autoresearch loop that automatically hardens RL
 > verifiers against reward hacking. Point it at a grader, it finds the cheats, seals them, and
 > reports how much more trustworthy the grader became, measured against held-out ground truth.
 > Full spec: `SPEC.md`.
