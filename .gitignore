@@ -53,7 +53,7 @@ Thumbs.db
 # Project artifacts (runs, traces, sandbox output)
 runs/
 *.log
-spikes/_traces/
+spikes/
 
 # PDFs (planning/submission docs)
 rampart-hourly.pdf
