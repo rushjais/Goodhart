@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "ruff check --quiet . 2>&1 | tail -30"
+            "command": "uv run ruff check --quiet . 2>&1 | tail -30"
           }
         ]
       }

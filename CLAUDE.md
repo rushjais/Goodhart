@@ -3,7 +3,7 @@
 Build-time guidance for working in this repo. This file is **advisory** — it nudges, it
 doesn't enforce.
 
-> **Project:** RAMPART (working name) — an autoresearch loop that automatically hardens RL
+> **Project:** Goodhart — an autoresearch loop that automatically hardens RL
 > verifiers against reward hacking. Point it at a grader, it finds the cheats, seals them, and
 > reports how much more trustworthy the grader became, measured against held-out ground truth.
 > Full spec: `SPEC.md`.
@@ -72,7 +72,7 @@ re-read this section.
 - **Plan before building.** When asked to build, first scope it in `PLAN.md` (current task +
   ordered steps), then code. You don't have to show the plan — just go.
 - **One feature, one commit.** Each capability lands on its own commit before the next starts.
-  Name with `feat`/`fix`/etc.; keep messages concise.
+  Name with `feat`/`fix`/etc.; keep messages concise. pull and review before committing anything.
 - **`PLAN.md` is the single working doc, and it IS tracked** (committed). It holds the current
   task, a `## Deferred` backlog, a `## Decisions` log, and a `## Resume` note. No separate
   HANDOFF / BACKLOG / DECISIONS files — fold them in. (Deviation from the source template, which

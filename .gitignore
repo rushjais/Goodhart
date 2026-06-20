@@ -1,3 +1,6 @@
+# Scratch / reference harness — kept on disk, never committed.
+.scratch/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -50,6 +53,7 @@ Thumbs.db
 # Project artifacts (runs, traces, sandbox output)
 runs/
 *.log
+spikes/_traces/
 
 # PDFs (planning/submission docs)
 rampart-hourly.pdf
@@ -59,4 +63,3 @@ rampart-submission.pdf
 
 # Local working docs (per-user, not shared)
 PLAN.md
-SKILL.md
