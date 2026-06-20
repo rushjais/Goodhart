@@ -62,11 +62,16 @@
   .row.reject { border-color:var(--warn); } .row.kill { border-color:var(--good); }
   .row.robust { border-color:#5a8dff; }
 
-  /* Tier B capability slot — hidden until a real recorded run is present. */
-  .tierb { border-top:1px solid var(--line); padding-bottom:12px; }
-  .tierb h2 .rec { color:var(--good); border:1px solid var(--good); border-radius:4px;
-                   padding:1px 5px; font-size:9px; margin-left:6px; letter-spacing:.08em; }
+  /* Capability beat — Tier A (the guaranteed consequence number) always shows;
+     Tier B (trained two-model chart) only renders if /capability.json exists. */
+  .cap-panel { border-top:1px solid var(--line); padding-bottom:10px; }
+  .sub-h { padding:8px 16px 2px; font-size:11px; color:var(--ink); }
+  .sub-h .live-tag, .sub-h .rec { border-radius:4px; padding:1px 5px; font-size:9px;
+                                  margin-left:6px; letter-spacing:.08em; }
+  .sub-h .live-tag { color:var(--warn); border:1px solid var(--warn); }
+  .sub-h .rec { color:var(--good); border:1px solid var(--good); }
   .tb-chart { padding:4px 16px 6px; }
+  .awaiting { font-size:11px; color:var(--muted); font-style:italic; }
   .tb-row { margin:9px 0; }
   .tb-lbl { font-size:11px; color:var(--muted); margin-bottom:3px; }
   .tb-track { display:flex; align-items:center; gap:8px; }
@@ -154,10 +159,15 @@
   <div class="side">
     <h2>Intel map</h2>
     <div class="pins" id="pins"></div>
-    <div id="tierb" class="tierb" hidden>
-      <h2>Tier B · capability beat<span class="rec">recorded</span></h2>
-      <div class="tb-chart" id="tb-chart"></div>
-      <div class="tb-src" id="tb-src"></div>
+    <div class="cap-panel">
+      <h2>Capability beat</h2>
+      <div class="sub-h">Tier A · reward reachable by pure cheating<span class="live-tag">live</span></div>
+      <div class="tb-chart" id="ta-chart"><div class="awaiting">awaiting first robustness reading…</div></div>
+      <div id="tier-b" hidden>
+        <div class="sub-h">Tier B · trained two-model beat<span class="rec">recorded</span></div>
+        <div class="tb-chart" id="tb-chart"></div>
+        <div class="tb-src" id="tb-src"></div>
+      </div>
     </div>
     <h2>Siege log</h2>
     <div class="log" id="log"></div>
@@ -339,6 +349,27 @@ function updateHeroes(u) {
   $("exploit-delta").innerHTML =
     `${breaches} breaches · ${sealed} sealed · ${u.probes} probes` +
     (robustHistory.length > 1 ? ` &nbsp;|&nbsp; was ${pct(1-base.held_out_blocked)}` : "");
+  renderTierA();
+}
+
+function barRow(label, value, kind, max) {
+  return `<div class="tb-row"><div class="tb-lbl">${escapeHtml(label)}</div>
+    <div class="tb-track"><div class="tb-bar ${kind}" style="width:${Math.round(value / max * 100)}%"></div>
+    <div class="tb-val">${pct(value)}</div></div></div>`;
+}
+
+// Tier A — the GUARANTEED consequence number (SPEC §9.5): reward reachable by pure cheating,
+// naive grader vs hardened. Derived from the locked robustness_update stream (naive = first
+// reading, hardened = latest), so it's real and always-on the instant Track A emits robustness.
+// NOTE: shape pending confirmation with Track A (Rayan) — see PLAN "Tier A contract".
+function renderTierA() {
+  if (!robustHistory.length) return;
+  const naive = 1 - robustHistory[0].held_out_blocked;
+  const hardened = 1 - robustHistory[robustHistory.length - 1].held_out_blocked;
+  const max = Math.max(naive, hardened, 1e-6);
+  $("ta-chart").innerHTML =
+    barRow("naive grader", naive, "bad", max) +
+    barRow("hardened grader", hardened, "good", max);
 }
 
 const HANDLERS = {
@@ -396,29 +427,22 @@ function dispatch(msg) {
   fn(msg);
 }
 
-// Tier B capability chart — appears ONLY if a real recorded run is served at /capability.json.
-// Shape: { metric, source, bars:[{label, value:0..1, kind:"leaky"|"hardened"}, ...] }
+// Tier B — OPTIONAL richer overlay: the trained two-model chart. Renders ONLY if a real
+// recorded run is served at /capability.json (absent → 404 → stays hidden). Tier A above
+// is unaffected and always shows. Shape: { metric, source, bars:[{label, value:0..1, kind}] }
 async function loadTierB() {
   try {
     const r = await fetch("capability.json", { cache: "no-store" });
-    if (!r.ok) return;                                   // 404 → keep the slot hidden
+    if (!r.ok) return;                                   // 404 → keep Tier B hidden
     const d = await r.json();
     if (!d || !Array.isArray(d.bars) || !d.bars.length) return;
-    const chart = $("tb-chart"); chart.innerHTML = "";
     const max = Math.max(...d.bars.map((b) => +b.value || 0), 1e-6);
-    for (const b of d.bars) {
-      const row = document.createElement("div"); row.className = "tb-row";
-      row.innerHTML =
-        `<div class="tb-lbl">${escapeHtml(b.label)}</div>
-         <div class="tb-track">
-           <div class="tb-bar ${b.kind === "hardened" ? "good" : "bad"}" style="width:${Math.round((+b.value || 0) / max * 100)}%"></div>
-           <div class="tb-val">${pct(+b.value || 0)}</div>
-         </div>`;
-      chart.appendChild(row);
-    }
+    $("tb-chart").innerHTML = d.bars
+      .map((b) => barRow(b.label, +b.value || 0, b.kind === "hardened" ? "good" : "bad", max))
+      .join("");
     $("tb-src").textContent = [d.metric, d.source].filter(Boolean).join(" · ");
-    $("tierb").hidden = false;
-  } catch (_) { /* no recorded run reachable → slot stays hidden */ }
+    $("tier-b").hidden = false;
+  } catch (_) { /* no recorded run reachable → Tier B stays hidden */ }
 }
 
 function connect() {
