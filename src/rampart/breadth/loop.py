@@ -11,11 +11,16 @@ splits are deterministic, so the aggregate is reproducible.
 """
 
 import concurrent.futures
+import os
+import shutil
 from dataclasses import dataclass
+from pathlib import Path
 from statistics import mean
 
+from ..agents.specialists import EDGE_SLIPPER, FORGER, run_specialist
 from ..gate import regression_gate
-from ..grader import Grader
+from ..grader import Grader, run_grader
+from ..harness import make_workdir
 from ..metrics.agreement import agreement, honest_pass
 from ..metrics.loop import split_breaches
 from ..substrate import expected_outputs, load_subset
@@ -25,6 +30,11 @@ from .cheats import forger_cheats
 
 DEFAULT_COUNT = 25
 DEFAULT_WORKERS = 8
+
+# Solution-level cheat specialists. SAPPER (harness tampering) is intentionally excluded:
+# the breadth grader rebuilds the tests from a pristine copy, so harness-level cheats can't
+# survive it — only solution-level cheats register here. Diversity still comes from the agent.
+DISCOVERY_SPECIALISTS = (FORGER, EDGE_SLIPPER)
 
 
 @dataclass
@@ -62,9 +72,39 @@ class BreadthReport:
         return self.n_breachable / self.n_graders if self.n_graders else 0.0
 
 
-def discovered_breaches(task) -> list[str]:
-    """Breaches discovered by the red agent (Track B). Empty until that lands."""
-    return []
+def maybe_client():
+    """Build an Anthropic client if a key is present, else None (-> seed fallback)."""
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return None
+    try:
+        from anthropic import Anthropic
+
+        return Anthropic()
+    except Exception:
+        return None
+
+
+def discovered_breaches(task, client=None, specialists=DISCOVERY_SPECIALISTS) -> list[str]:
+    """Solution-level breaches found by the red swarm (Track B).
+
+    Runs each specialist against a fresh workdir; for runs that pass the grader, returns the
+    agent's solution.py source. These are genuine, agent-discovered cheats (we author no
+    exploit). Returns [] when no LLM client is available -> the sweep falls back to the seed.
+    """
+    if client is None:
+        return []
+    found: list[str] = []
+    for specialist in specialists:
+        workdir = make_workdir(task)
+        try:
+            run = run_specialist(specialist, workdir, run_tests=run_grader, client=client)
+            if run.result.passed:
+                src = (Path(workdir) / "solution.py").read_text()
+                if src.strip() and src not in found:
+                    found.append(src)
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+    return found
 
 
 def _split_plus(task) -> tuple[list, list]:
@@ -85,7 +125,7 @@ def _split_plus(task) -> tuple[list, list]:
     return plus_only[0::2], plus_only[1::2]
 
 
-def run_task(task, candidates: list[str] | None = None) -> TaskResult:
+def run_task(task, candidates: list[str] | None = None, client=None) -> TaskResult:
     """The full M1 loop on one task. Never raises — failures are recorded honestly."""
     try:
         gold = task.prompt + task.canonical_solution
@@ -94,11 +134,12 @@ def run_task(task, candidates: list[str] | None = None) -> TaskResult:
 
         if candidates is not None:
             source = "provided"
+        elif client is not None:
+            candidates = discovered_breaches(task, client=client)  # agent-discovered cheats
+            source = "discovered"
         else:
-            candidates = discovered_breaches(task)
-            source = "red_agent"
-            if not candidates:
-                candidates, source = forger_cheats(task), "seed"
+            candidates = forger_cheats(task)  # labeled seed fallback
+            source = "seed"
 
         naive = Grader(task)
         breaches = [
@@ -134,13 +175,20 @@ def run_breadth(
     n_tasks: int = DEFAULT_COUNT,
     workers: int = DEFAULT_WORKERS,
     candidates_by_task: dict | None = None,
+    client=None,
 ) -> BreadthReport:
-    """Run the M1 loop across the first n_tasks EvalPlus problems and aggregate."""
+    """Run the M1 loop across the first n_tasks EvalPlus problems and aggregate.
+
+    With a `client`, breaches are discovered by the red swarm per task (non-deterministic,
+    needs ANTHROPIC_API_KEY); without one, the deterministic seed forger is used (labeled).
+    """
     tasks = load_subset(n_tasks)
     by_task = candidates_by_task or {}
     results: list = [None] * len(tasks)
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        index = {pool.submit(run_task, t, by_task.get(t.task_id)): i for i, t in enumerate(tasks)}
+        index = {
+            pool.submit(run_task, t, by_task.get(t.task_id), client): i for i, t in enumerate(tasks)
+        }
         for fut in concurrent.futures.as_completed(index):
             results[index[fut]] = fut.result()
 

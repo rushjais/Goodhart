@@ -5,15 +5,25 @@ python -m rampart.breadth --count 25 --workers 8
 
 import argparse
 
-from .loop import DEFAULT_COUNT, DEFAULT_WORKERS, run_breadth
+from .loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client, run_breadth
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="RAMPART M2: breadth + exploitability hit-rate")
     ap.add_argument("--count", type=int, default=DEFAULT_COUNT, help="number of EvalPlus tasks")
     ap.add_argument("--workers", type=int, default=DEFAULT_WORKERS, help="parallel workers")
+    ap.add_argument(
+        "--source",
+        choices=["auto", "seed", "discovered"],
+        default="auto",
+        help="auto: red agent if ANTHROPIC_API_KEY set, else seed; discovered: require the agent",
+    )
     args = ap.parse_args()
-    r = run_breadth(args.count, args.workers)
+
+    client = None if args.source == "seed" else maybe_client()
+    if args.source == "discovered" and client is None:
+        print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
+    r = run_breadth(args.count, args.workers, client=client)
 
     print("RAMPART — Milestone 2: breadth across EvalPlus (HumanEval)")
     note = "  (generic input-memorizing cheat; red agent not wired)" if r.source == "seed" else ""

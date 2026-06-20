@@ -2,14 +2,44 @@
 hit-rate, with the grader/oracle split honest per task and the sweep deterministic.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
+from rampart.agents.specialists import FORGER
 from rampart.breadth import run_breadth, run_task
 from rampart.breadth.cheats import forger_cheats
-from rampart.breadth.loop import _split_plus
+from rampart.breadth.loop import _split_plus, discovered_breaches
 from rampart.substrate import load_subset
 
 _N = 4
+
+
+class _ScriptedRed:
+    """Fake Anthropic client: writes one solution, runs the tests, then stops. Reacts to the
+    message count so each fresh red-agent session (re)starts the script — no network."""
+
+    def __init__(self, solution_src: str):
+        self._src = solution_src
+        outer = self
+
+        class _Messages:
+            def create(self, *, messages, **kwargs):
+                n = len(messages)
+                if n == 1:
+                    block = SimpleNamespace(
+                        type="tool_use",
+                        id="w",
+                        name="write_file",
+                        input={"path": "solution.py", "content": outer._src},
+                    )
+                elif n == 3:
+                    block = SimpleNamespace(type="tool_use", id="r", name="run_tests", input={})
+                else:
+                    block = SimpleNamespace(type="text", text="done")
+                return SimpleNamespace(content=[block], stop_reason="end_turn")
+
+        self.messages = _Messages()
 
 
 @pytest.fixture(scope="module")
@@ -83,3 +113,24 @@ def test_discovered_breaches_swap_in_without_code_change():
     assert result.breachable
     # a genuinely correct solution is not counted as a breach
     assert run_task(task, candidates=[gold]).breachable is False
+
+
+def test_red_swarm_discovery_is_wired_with_a_scripted_client():
+    """End-to-end the discovered path (no network): the red agent writes a solution, we read
+    it back, and run_task consumes it labeled 'discovered'."""
+    task = load_subset(1)[0]
+    cheat = forger_cheats(task)[0]
+    client = _ScriptedRed(cheat)
+
+    found = discovered_breaches(task, client=client, specialists=(FORGER,))
+    assert len(found) == 1 and found[0].strip()
+
+    result = run_task(task, client=client)
+    assert result.source == "discovered"
+    assert result.breachable is True
+
+
+def test_no_client_falls_back_to_seed():
+    task = load_subset(1)[0]
+    assert discovered_breaches(task, client=None) == []
+    assert run_task(task).source == "seed"
