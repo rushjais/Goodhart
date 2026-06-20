@@ -20,7 +20,13 @@ DISCOVERY_SPECIALISTS = (FORGER, EDGE_SLIPPER)
 def build_discover_fn(client, specialists=DISCOVERY_SPECIALISTS):
     """Engine-backed breach source for run_breadth: run the red swarm per task and return the
     solution.py of any run that passed the grader. The spine (make_workdir/run_grader) is
-    reached through loop.interface; breadth itself never imports the engine."""
+    reached through loop.interface; breadth itself never imports the engine.
+
+    CONTRACT: every source returned has already PASSED THE NAIVE GRADER (run_grader on the
+    agent's workdir -> R_naive=1), harness tampering included — we only return runs where
+    run.result.passed. run_task relies on this: it treats a discovered source as R_naive=1 and
+    counts it as a breach iff the oracle fails (it does NOT re-grade with the pristine rebuild,
+    which is the hardened grader, not the baseline)."""
 
     def discover(task) -> list[str]:
         found: list[str] = []
@@ -68,15 +74,21 @@ def main() -> None:
     print()
     if r.n_measurable:
         print(f"  aggregate on the HELD-OUT split (over {r.n_measurable} measurable task(s)):")
+        print("    baseline = standard grader runs the repo's own test file (realistic CI)")
+        print("    AFTER    = graded from a pristine read-only copy")
         print(f"    agreement BEFORE : {r.mean_agreement_before:.2f}")
         print(f"    agreement AFTER  : {r.mean_agreement_after:.2f}")
         print(f"    honest_pass      : {r.mean_honest_pass:.2f}")
     else:
-        print("  no measurable tasks (need >=2 genuine breaches per task to split).")
+        print("  no measurable tasks (need >=2 distinct breaches per task to split).")
 
     unmeasurable = r.n_breachable - r.n_measurable
     if unmeasurable or r.n_failed:
         print(f"  coverage      : {unmeasurable} breachable-but-unmeasurable, {r.n_failed} failed")
+    if unmeasurable:
+        print("    note: harness-tamper breaches collapse to one stub solution.py (<2 distinct")
+        print("    per task), so measurable agreement is sparse until the breach unit becomes")
+        print("    the cheat artifact rather than solution.py (deferred).")
 
 
 if __name__ == "__main__":
