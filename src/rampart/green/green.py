@@ -113,14 +113,19 @@ def harden(
     breach_src: str,
     gold_src: str,
     *,
+    base_grader: Grader | None = None,
     client: Any = None,
     model: str = DEFAULT_MODEL,
     max_attempts: int = 3,
 ) -> GreenResult:
-    """Seal `breach_src` without rejecting `gold_src`. Returns the patched grader if sealed."""
+    """Seal `breach_src` without rejecting `gold_src`. Returns the patched grader if sealed.
+
+    `base_grader` is the grader to harden ON TOP OF (defaults to the pristine Grader(task));
+    in the escalation loop it's the already-hardened grader, so patches compose across rounds.
+    """
     if client is None:
         client = _make_client()
-    base = Grader(task)
+    base = base_grader if base_grader is not None else Grader(task)
     feedback = ""
     reason = "no proposal"
 

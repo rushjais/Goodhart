@@ -8,12 +8,16 @@ from .core import (
     Status,
     run_conductor,
 )
+from .escalate import EscalationReport, Round, escalate_gate
 
 __all__ = [
     "BreachRecord",
     "ConductorReport",
+    "EscalationReport",
+    "Round",
     "SealResult",
     "SharedMemory",
     "Status",
+    "escalate_gate",
     "run_conductor",
 ]
