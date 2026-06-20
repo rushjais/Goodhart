@@ -5,6 +5,8 @@ from .consequence import (
     as_robustness_updates,
     measure_consequence,
     run_consequence,
+    tier_a_payload,
+    write_tier_a,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "as_robustness_updates",
     "measure_consequence",
     "run_consequence",
+    "tier_a_payload",
+    "write_tier_a",
 ]

@@ -2,11 +2,15 @@
 robustness_update events the dashboard's Tier A slot consumes.
 """
 
+import json
+
 from rampart.breadth.loop import BreadthReport, TaskResult
 from rampart.consequence import (
     as_robustness_updates,
     measure_consequence,
     run_consequence,
+    tier_a_payload,
+    write_tier_a,
 )
 
 
@@ -60,3 +64,24 @@ def test_run_consequence_end_to_end_seed_is_deterministic():
     assert c.reward_naive_rate == 1.0  # leaky reward fully pays for cheating
     assert c.reward_hardened_rate == 0.0  # hardened pays ~0
     assert c.n_cheats >= 1
+
+
+def test_write_tier_a_is_self_describing(tmp_path):
+    c = measure_consequence(_fake_report(source="seed"))
+    path = tmp_path / "tier_a.json"
+    write_tier_a(c, path)
+    assert json.loads(path.read_text()) == {
+        "tier_a": {
+            "naive_points": c.reward_naive_points,
+            "hardened_points": c.reward_hardened_points,
+            "source": "seed",
+            "n_measurable": 2,
+        }
+    }
+
+
+def test_tier_a_source_reflects_the_actual_run_never_confused():
+    # source is written from the run, so a seed run can never be shown as discovered.
+    assert tier_a_payload(measure_consequence(_fake_report("seed")))["tier_a"]["source"] == "seed"
+    discovered = tier_a_payload(measure_consequence(_fake_report("discovered")))
+    assert discovered["tier_a"]["source"] == "discovered"

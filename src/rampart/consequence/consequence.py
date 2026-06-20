@@ -15,7 +15,9 @@ hardened = latest), NOT capability.json (that file is Tier B, the trained chart)
 expose Tier A as `robustness_update` events via `as_robustness_updates`.
 """
 
+import json
 from dataclasses import dataclass
+from pathlib import Path
 
 from ..breadth.loop import DEFAULT_COUNT, DEFAULT_WORKERS, BreadthReport, run_breadth
 from ..events import RobustnessUpdate
@@ -25,6 +27,7 @@ from ..events import RobustnessUpdate
 class ConsequenceReport:
     source: str
     n_cheats: int  # held-out cheats measured
+    n_measurable: int  # tasks that contributed a measurable held-out split
     reward_naive_points: float  # points the naive grader pays for pure cheating
     reward_hardened_points: float  # points the hardened grader pays (~0)
     reward_naive_rate: float  # per cheat (== 1 - blocked_before)
@@ -45,6 +48,7 @@ def measure_consequence(report: BreadthReport) -> ConsequenceReport:
     return ConsequenceReport(
         source=report.source,
         n_cheats=n_cheats,
+        n_measurable=len(measurable),
         reward_naive_points=naive_points,
         reward_hardened_points=hardened_points,
         reward_naive_rate=naive_points / n_cheats if n_cheats else 0.0,
@@ -53,6 +57,25 @@ def measure_consequence(report: BreadthReport) -> ConsequenceReport:
         blocked_after=blocked_after,
         honest_pass=report.mean_honest_pass if report.mean_honest_pass is not None else 1.0,
     )
+
+
+def tier_a_payload(report: ConsequenceReport) -> dict:
+    """Self-describing Tier A magnitude. `source` and `n_measurable` come from the actual run,
+    so a seed run can never be presented as discovered."""
+    return {
+        "tier_a": {
+            "naive_points": report.reward_naive_points,
+            "hardened_points": report.reward_hardened_points,
+            "source": report.source,
+            "n_measurable": report.n_measurable,
+        }
+    }
+
+
+def write_tier_a(report: ConsequenceReport, path) -> None:
+    """Write the Tier A reward-points magnitude to its own file (NOT capability.json /
+    capability_run.json — those are reserved for Tier B, the trained chart)."""
+    Path(path).write_text(json.dumps(tier_a_payload(report), indent=2) + "\n")
 
 
 def as_robustness_updates(c: ConsequenceReport) -> list[RobustnessUpdate]:

@@ -7,10 +7,15 @@ python -m rampart.consequence --emit-events   # robustness_update JSON for the d
 import argparse
 import dataclasses
 import json
+from pathlib import Path
 
 from ..breadth.__main__ import build_discover_fn
 from ..breadth.loop import DEFAULT_COUNT, DEFAULT_WORKERS, maybe_client
-from .consequence import as_robustness_updates, run_consequence
+from .consequence import as_robustness_updates, run_consequence, tier_a_payload, write_tier_a
+
+# Tier A magnitude lands at the repo root, beside golden_run.jsonl (and Tier B's
+# capability_run.json) — where the server/dashboard look. Resolved off this file, not cwd.
+_TIER_A_PATH = Path(__file__).resolve().parents[3] / "tier_a.json"
 
 
 def main() -> None:
@@ -23,6 +28,11 @@ def main() -> None:
         action="store_true",
         help="print the robustness_update events the dashboard Tier A slot consumes",
     )
+    ap.add_argument(
+        "--emit-tier-a",
+        action="store_true",
+        help=f"write the Tier A reward-points magnitude to {_TIER_A_PATH.name}",
+    )
     args = ap.parse_args()
 
     client = None if args.source == "seed" else maybe_client()
@@ -30,6 +40,11 @@ def main() -> None:
         print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
     discover_fn = build_discover_fn(client) if client is not None else None
     c = run_consequence(args.count, args.workers, discover_fn=discover_fn)
+
+    if args.emit_tier_a:
+        write_tier_a(c, _TIER_A_PATH)
+        print(f"wrote {_TIER_A_PATH}: {tier_a_payload(c)['tier_a']}")
+        return
 
     if args.emit_events:
         for ev in as_robustness_updates(c):
