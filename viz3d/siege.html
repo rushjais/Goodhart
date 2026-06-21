@@ -1248,17 +1248,18 @@
     }
 
     // Expanding shock ring (red for a breach, green for a seal).
-    function sealFlash(pos, hex) {
+    function sealFlash(pos, hex, scale) {
+      scale = scale || 1;
       const ring = new THREE.Mesh(
         new THREE.TorusGeometry(0.6, 0.12, 8, 24),
-        new THREE.MeshBasicMaterial({ color: hex, transparent: true, toneMapped: false })
+        new THREE.MeshBasicMaterial({ color: hex, transparent: true, toneMapped: false, depthWrite: false })
       );
       ring.position.copy(pos);
       ring.rotation.x = -Math.PI / 2;
       scene.add(ring);
       addTween({
         dur: 0.6, ease: easeOutCubic,
-        onUpdate: (e) => { const s = 0.3 + e * 3; ring.scale.set(s, s, s); ring.material.opacity = 1 - e; },
+        onUpdate: (e) => { const s = (0.3 + e * 3) * scale; ring.scale.set(s, s, s); ring.material.opacity = 1 - e; },
         onComplete: () => { scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); },
       });
     }
@@ -1286,6 +1287,57 @@
     }
 
     // Breach = the agent SLIPS THROUGH a leaky gate to the inside.
+    // Unmissable breach hit on a gate (all transient, primitives only): additive red flash
+    // over the door + scale punch + a red shard burst + an expanding ground ring.
+    function breachImpact(gate) {
+      const flash = new THREE.Mesh(
+        new THREE.BoxGeometry(3.9, 4.9, 0.3),
+        new THREE.MeshBasicMaterial({ color: 0xff2a18, transparent: true, opacity: 0.85,
+          blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, fog: false }));
+      flash.position.set(0, 2.5, 0.6);
+      gate.add(flash);
+      addTween({ dur: 0.4, ease: easeOutCubic,
+        onUpdate: (e) => { flash.material.opacity = 0.85 * (1 - e); },
+        onComplete: () => { gate.remove(flash); flash.geometry.dispose(); flash.material.dispose(); } });
+
+      addTween({ dur: 0.42,  // the gate visibly takes a hit
+        onUpdate: (e) => { gate.scale.setScalar(1 + 0.15 * Math.sin(e * Math.PI)); },
+        onComplete: () => gate.scale.setScalar(1) });
+
+      const shards = new THREE.Group();
+      shards.position.set(0, 2.5, 0.7);
+      gate.add(shards);
+      const sMat = new THREE.MeshBasicMaterial({ color: 0xff3a22, transparent: true,
+        depthWrite: false, toneMapped: false, fog: false });
+      const vel = [];
+      for (let i = 0; i < 8; i++) {
+        shards.add(new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.22, 0.22), sMat));
+        const ang = (i / 8) * TWO_PI;
+        vel.push([Math.cos(ang) * 3.4, 2.6 + (i % 3) * 0.6, 1.6 + Math.abs(Math.sin(ang)) * 2.2]);
+      }
+      addTween({ dur: 0.55,
+        onUpdate: (e, k) => {
+          for (let i = 0; i < shards.children.length; i++) {
+            const v = vel[i], sh = shards.children[i];
+            sh.position.set(v[0] * k, v[1] * k - 4.2 * k * k, v[2] * k); // out + gravity arc
+            sh.rotation.set(k * 6, k * 5, 0);
+          }
+          sMat.opacity = 1 - e;
+        },
+        onComplete: () => { gate.remove(shards); shards.children.forEach((o) => o.geometry.dispose()); sMat.dispose(); } });
+
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.6, 1.0, 22),
+        new THREE.MeshBasicMaterial({ color: 0xff3020, transparent: true, opacity: 0.8,
+          side: THREE.DoubleSide, depthWrite: false, toneMapped: false, fog: false }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(0, 0.07, 1.4);
+      gate.add(ring);
+      addTween({ dur: 0.5, ease: easeOutCubic,
+        onUpdate: (e) => { const s = 1 + e * 4.5; ring.scale.set(s, s, s); ring.material.opacity = 0.8 * (1 - e); },
+        onComplete: () => { gate.remove(ring); ring.geometry.dispose(); ring.material.dispose(); } });
+    }
+
     function onBreachFound(ev) {
       const _a = agents.get(ev.agent);
       if (_a) _a.breached = true;  // so it's never tagged "found nothing"
@@ -1294,8 +1346,9 @@
       if (!gate) return;
       setGateStatus(gate, "breached");
       setDoor(gate, true, 0.5, easeOutCubic); // door lifts (portcullis-style)
+      breachImpact(gate);                     // unmissable impact on the real breached gate
       const a = gate.userData.angle;
-      sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 2.4, Math.sin(a) * RING_R), 0xff5a3c);
+      sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 2.4, Math.sin(a) * RING_R), 0xff5a3c, 1.5);
 
       const agent = agents.get(ev.agent);
       if (agent && !agent.dead) {
@@ -1339,11 +1392,15 @@
       }
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6), wood());
       pole.position.y = 4.7;
+      const flagPivot = new THREE.Group();        // pivot at the pole → unfurls rightward
+      flagPivot.position.set(0.04, 5.2, 0);
       const flag = new THREE.Mesh(
         new THREE.BoxGeometry(1.1, 0.7, 0.06),
         new THREE.MeshLambertMaterial({ color: C.banner, emissive: 0x2a0808, emissiveIntensity: 0.25, flatShading: true }));
-      flag.position.set(0.62, 5.2, 0);
-      t.add(pole, flag);
+      flag.position.set(0.55, 0, 0);              // left edge at the pivot
+      flagPivot.add(flag);
+      t.add(pole, flagPivot);
+      t.userData.flag = flagPivot;
       const torch = makeTorch(0.9);
       torch.position.set(0, 3.2, 0.95);
       t.add(torch);
@@ -1364,15 +1421,31 @@
         const turret = buildTurret();
         turret.position.set(0, 6.3, -0.2); // on the lintel, centered (status flag stays in front/below)
         turret.scale.y = 0.02;
+        const flag = turret.userData.flag;
+        if (flag) flag.scale.x = 0.02;            // banner furled until the turret locks in
         gate.add(turret);
         gate.userData.turret = turret;
         addTween({
           dur: 0.85, ease: easeOutBack,           // satisfying overshoot as it locks in
           onUpdate: (e) => { turret.scale.y = Math.max(0.02, e); },
-          onComplete: () => { turret.scale.y = 1; },
+          onComplete: () => {
+            turret.scale.y = 1;
+            // soft settle "thunk" — a tiny downward bounce after the overshoot
+            addTween({
+              dur: 0.22,
+              onUpdate: (e) => { turret.scale.y = 1 - 0.06 * Math.sin(e * Math.PI); },
+              onComplete: () => { turret.scale.y = 1; },
+            });
+            // banner unfurls across the new battlement
+            if (flag) addTween({
+              dur: 0.45, ease: easeOutBack,
+              onUpdate: (e) => { flag.scale.x = Math.max(0.02, e); },
+              onComplete: () => { flag.scale.x = 1; },
+            });
+          },
         });
-        // gold flare at the new battlement top (torch-flare / flag-raise accent)
-        sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 9.6, Math.sin(a) * RING_R), 0xd9a531);
+        // bigger, brighter gold flare so "defense added" reads from a distance
+        sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 9.6, Math.sin(a) * RING_R), 0xffce5a, 1.9);
       }
     }
 
