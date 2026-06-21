@@ -139,7 +139,9 @@
     controls.target.set(0, 7, 0);
 
     // Lighting: warm dusk hemisphere + low warm key (shadows) + cool dusk rim.
-    const hemi = new THREE.HemisphereLight(0x6a586a, 0x3a3024, 0.95);
+    // Gentle lift so the field reads as a living dusk landscape (greener ground bounce),
+    // without washing out the gauges/labels — key/rim keep the torchlit dusk mood.
+    const hemi = new THREE.HemisphereLight(0x7d6f64, 0x46442e, 1.18);
     scene.add(hemi);
 
     const key = new THREE.DirectionalLight(0xffb169, 1.55);
@@ -629,6 +631,59 @@
       scene.add(field);
     }
     buildSiegeField();
+
+    // Low-poly greenery to warm the field — grass tufts (in + around), mid-ground shrubs &
+    // trees. All instanced (~3 draw calls), no shadows, ground-level so nothing is obscured.
+    function warmGreenery() {
+      const g = new THREE.Group();
+      const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), S = new THREE.Vector3();
+      let seed = 1337;
+      const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+      const up = new THREE.Vector3(0, 1, 0);
+
+      // Grass tufts scattered across the field (and lightly inside the courtyard).
+      const TUFTS = 360;
+      const tufts = new THREE.InstancedMesh(
+        new THREE.ConeGeometry(0.16, 0.7, 4),
+        new THREE.MeshLambertMaterial({ color: 0x46622b, flatShading: true }), TUFTS);
+      for (let i = 0; i < TUFTS; i++) {
+        const ang = rnd() * TWO_PI, r = 9 + rnd() * 86, h = 0.6 + rnd() * 0.9;
+        P.set(Math.cos(ang) * r, 0.35 * h, Math.sin(ang) * r);
+        Q.setFromAxisAngle(up, rnd() * TWO_PI);
+        S.set(0.8 + rnd() * 0.6, h, 0.8 + rnd() * 0.6);
+        M.compose(P, Q, S); tufts.setMatrixAt(i, M);
+      }
+      tufts.instanceMatrix.needsUpdate = true; g.add(tufts);
+
+      // Low-poly shrubs in the mid-ground.
+      const SHRUBS = 54;
+      const shrubs = new THREE.InstancedMesh(
+        new THREE.IcosahedronGeometry(0.9, 0),
+        new THREE.MeshLambertMaterial({ color: 0x35522a, flatShading: true }), SHRUBS);
+      for (let i = 0; i < SHRUBS; i++) {
+        const ang = rnd() * TWO_PI, r = 30 + rnd() * 28, sc = 0.7 + rnd() * 0.8;
+        P.set(Math.cos(ang) * r, sc * 0.8, Math.sin(ang) * r);
+        Q.identity(); S.set(sc, sc * 0.85, sc);
+        M.compose(P, Q, S); shrubs.setMatrixAt(i, M);
+      }
+      shrubs.instanceMatrix.needsUpdate = true; g.add(shrubs);
+
+      // Mid-ground trees — extend the tree line inward (between camp and the far pines).
+      const MID = 44;
+      const mids = new THREE.InstancedMesh(
+        new THREE.ConeGeometry(2.0, 5.2, 6),
+        new THREE.MeshLambertMaterial({ color: 0x2c4423, flatShading: true }), MID);
+      for (let i = 0; i < MID; i++) {
+        const ang = rnd() * TWO_PI, r = 40 + rnd() * 16, h = 0.8 + rnd() * 0.5;
+        P.set(Math.cos(ang) * r, 2.6 * h, Math.sin(ang) * r);
+        Q.identity(); S.set(h, h, h);
+        M.compose(P, Q, S); mids.setMatrixAt(i, M);
+      }
+      mids.instanceMatrix.needsUpdate = true; g.add(mids);
+
+      scene.add(g);
+    }
+    warmGreenery();
 
     // Stop point just outside a gate (where an attacker halts).
     function gateAttackPos(id) {
