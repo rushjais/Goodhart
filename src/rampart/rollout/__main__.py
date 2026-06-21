@@ -4,6 +4,8 @@
   python -m rampart.rollout --mock --models opus,haiku --count 2          # mock rewards
   python -m rampart.rollout --rg --models opus,sonnet,haiku --count 30          # reasoning-gym
   python -m rampart.rollout --rg --red --models opus,haiku --count 30 --k 4      # + real cheats
+  python -m rampart.rollout --hardest --count 25 --models "" --fw-pressure \
+      --out runs/fw_cheats.jsonl   # diverse code cheats from Fireworks Qwen-Coder (needs key)
 
 Real EvalPlus rewards by default; --mock swaps marker scorers; --rg switches the whole substrate
 to reasoning-gym (gsm_symbolic): RG tasks, RG answer-style policies, real RG grader/oracle. With
@@ -19,6 +21,7 @@ from .models import (
     build_models,
     build_rg_models,
     build_rg_pressure_models,
+    pressure_models,
     red_models,
 )
 from .scorers import mock_scorers, real_scorers, rg_real_scorers
@@ -42,6 +45,11 @@ def main() -> None:
     )
     p.add_argument("--hardest", action="store_true", help="(default) use the hardest tasks")
     p.add_argument("--easy", action="store_true", help="use the first tasks instead of the hardest")
+    p.add_argument(
+        "--fw-pressure",
+        action="store_true",
+        help="add the reward-pressured Fireworks Qwen-Coder code-cheat policy (needs the key)",
+    )
     p.add_argument("--rg", action="store_true", help="reasoning-gym substrate (gsm_symbolic)")
     p.add_argument("--dataset", default="gsm_symbolic", help="reasoning-gym dataset (with --rg)")
     p.add_argument("--seed", type=int, default=42, help="reasoning-gym split seed (with --rg)")
@@ -55,6 +63,8 @@ def main() -> None:
         models = build_models(args.models.split(","))
         if args.red:
             models += red_models()
+        if args.fw_pressure:  # reward-pressured Fireworks Qwen-Coder, a new code-cheat source
+            models += pressure_models(["fireworks-qwen-coder"])
     if not models:
         print("no models available — check API keys (ANTHROPIC_API_KEY / OPENAI_API_KEY / ...)")
         return

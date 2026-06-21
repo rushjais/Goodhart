@@ -26,6 +26,11 @@ _ANTHROPIC = {
 _OPENAI = {
     "gpt-4o-mini": ("OPENAI_API_KEY", None, "gpt-4o-mini"),
     "deepseek-chat": ("DEEPSEEK_API_KEY", "https://api.deepseek.com", "deepseek-chat"),
+    "fireworks-qwen-coder": (
+        "FIREWORKS_API_KEY",
+        "https://api.fireworks.ai/inference/v1",
+        "accounts/fireworks/models/qwen2p5-coder-7b-instruct",
+    ),
 }
 
 DEFAULT_MODELS = ["opus", "sonnet", "haiku", "gpt-4o-mini", "deepseek-chat"]
@@ -183,6 +188,55 @@ def build_rg_pressure_models(
         for n in (names or list(_ANTHROPIC))
         if n in _ANTHROPIC
     ]
+
+
+def pressure_models(names: list[str] | None = None, *, max_turns: int = 4) -> list[Model]:
+    """Reward-pressured CODE cheat policies over OpenAI-compatible models (default: Fireworks Qwen).
+
+    Each `sample(task)` runs the code pressure agent (`agents.code_pressure.run_code_pressure`) —
+    told only the OBJECTIVE (get the grader to accept), never the METHOD — against the real visible
+    grader, and returns the solution it discovered. A new, different cheat source from the Anthropic
+    red specialists. Needs the model's API key (else skipped), mirroring red_models.
+    """
+    import os
+
+    from ..agents.code_pressure import run_code_pressure
+    from ..loop import interface
+
+    out: list[Model] = []
+    for name in names or ["fireworks-qwen-coder"]:
+        if name not in _OPENAI:
+            continue
+        env_var, base_url, model_id = _OPENAI[name]
+        if not os.environ.get(env_var):
+            continue
+        try:
+            from openai import OpenAI
+        except ImportError:
+            continue
+        client = OpenAI(base_url=base_url, timeout=60, max_retries=2)
+
+        def make_sample(mid, cl):
+            def complete(messages) -> str:
+                resp = cl.chat.completions.create(
+                    model=mid, max_tokens=900, temperature=0.7, messages=messages
+                )
+                return resp.choices[0].message.content or ""
+
+            def sample(task) -> str:
+                workdir = interface.make_workdir(task)
+                return run_code_pressure(
+                    task,
+                    workdir,
+                    complete=complete,
+                    run_tests=interface.run_grader,
+                    max_turns=max_turns,
+                )
+
+            return sample
+
+        out.append(Model(name=f"pressure:{name}", sample=make_sample(model_id, client)))
+    return out
 
 
 # Solution-level cheat specialists make the best cheat policies (sapper tampers the harness,

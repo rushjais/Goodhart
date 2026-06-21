@@ -17,6 +17,7 @@ from .models import (
     build_models,
     build_rg_models,
     build_rg_pressure_models,
+    pressure_models,
     red_models,
 )
 from .scorers import mock_scorers, real_scorers, rg_real_scorers
@@ -29,6 +30,7 @@ __all__ = [
     "build_models",
     "build_rg_models",
     "build_rg_pressure_models",
+    "pressure_models",
     "generate_rollouts",
     "generate_seed_rollouts",
     "load_jsonl",
