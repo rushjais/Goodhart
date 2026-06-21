@@ -66,7 +66,12 @@ def main() -> None:
         "--hardest",
         type=int,
         default=None,
-        help="run the N hardest tasks (tricky logic / sparse base) instead of the first --count",
+        help="override the count of hardest tasks (default: the --count hardest)",
+    )
+    ap.add_argument(
+        "--easy",
+        action="store_true",
+        help="use the first --count tasks instead of the hardest (default: hardest)",
     )
     ap.add_argument(
         "--model",
@@ -79,7 +84,8 @@ def main() -> None:
     if args.source == "discovered" and client is None:
         print("  (no ANTHROPIC_API_KEY / anthropic client -> cannot discover; using seed)")
     discover_fn = build_discover_fn(client, model=args.model) if client is not None else None
-    tasks = load_hardest(args.hardest) if args.hardest else None
+    # Default: the hardest tasks (where cheats actually surface). --easy opts out to the first-N.
+    tasks = None if args.easy else load_hardest(args.hardest or args.count)
     r = run_breadth(args.count, args.workers, discover_fn=discover_fn, tasks=tasks)
 
     print("RAMPART — Milestone 2: breadth across EvalPlus (HumanEval)")

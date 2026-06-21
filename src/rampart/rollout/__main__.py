@@ -40,7 +40,8 @@ def main() -> None:
     p.add_argument(
         "--seed-exploits", action="store_true", help="inject deterministic forger cheats"
     )
-    p.add_argument("--hardest", action="store_true", help="use the hardest tasks (more cheating)")
+    p.add_argument("--hardest", action="store_true", help="(default) use the hardest tasks")
+    p.add_argument("--easy", action="store_true", help="use the first tasks instead of the hardest")
     p.add_argument("--rg", action="store_true", help="reasoning-gym substrate (gsm_symbolic)")
     p.add_argument("--dataset", default="gsm_symbolic", help="reasoning-gym dataset (with --rg)")
     p.add_argument("--seed", type=int, default=42, help="reasoning-gym split seed (with --rg)")
@@ -67,10 +68,10 @@ def main() -> None:
 
     if args.rg:
         tasks = load_rg_subset(args.dataset, args.count, args.seed)
-    elif args.hardest:
-        tasks = load_hardest(args.count)
-    else:
+    elif args.easy:
         tasks = load_subset(args.count)
+    else:
+        tasks = load_hardest(args.count)  # default: hardest, where cheats actually surface
 
     exploit_fn = None
     if args.seed_exploits and not args.rg:
