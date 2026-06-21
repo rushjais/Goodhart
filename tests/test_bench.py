@@ -1,4 +1,6 @@
 from rampart.bench.core import column, leaderboard, score_verifier
+from rampart.bench.gap import bestofk_gap
+from rampart.bench.verifiers import rescoring_verifier
 from rampart.rollout.dataset import Rollout
 
 
@@ -32,3 +34,29 @@ def test_custom_verdict_plugs_in():
 def test_column_reads_reward():
     r = _r("a", 1, 0, 0)
     assert column("r_naive")(r) == 1 and column("r_hardened")(r) == 0
+
+
+def test_bestofk_gap_pools_by_task():
+    # one task, pool = honest solve + a cheat that only the naive reward accepts
+    rows = [_r("t", 1, 1, 1), _r("t", 1, 0, 0)]
+    g = bestofk_gap(rows, seed=0)
+    assert g.n_tasks == 1
+    assert g.hardened_accuracy == 1.0  # hardened reward picks the honest solve (only it scores 1)
+    assert g.gap >= 0.0  # hardened never worse than naive
+
+    all_honest = [_r("a", 1, 1, 1), _r("b", 1, 1, 1)]
+    assert bestofk_gap(all_honest).gap == 0.0  # nothing to recover
+
+
+def test_rescoring_verifier_loads_task_and_grades_completion():
+    tasks = {"a": "TASK_A"}
+    seen = []
+
+    def score(task, completion):
+        seen.append((task, completion))
+        return 1 if "good" in completion else 0
+
+    v = rescoring_verifier(score, load_task=lambda tid: tasks[tid])
+    assert v(Rollout("a", "m", "good code", 1, 1, 1)) == 1
+    assert v(Rollout("a", "m", "bad", 1, 0, 0)) == 0
+    assert ("TASK_A", "good code") in seen
