@@ -18,6 +18,7 @@ _DASHBOARD = _ROOT / "dashboard" / "index.html"
 # Two SEPARATE optional side-channel files (never shared), each 404s until written:
 #   tier_a.json         — Track A's reward-points magnitude (the spoken-consequence line)
 #   capability_run.json — Tier B's trained two-model chart
+_VIZ3D = _ROOT / "viz3d" / "siege.html"  # alternate 3D surface (same /ws stream)
 _TIER_A = _ROOT / "tier_a.json"
 _CAPABILITY = _ROOT / "capability_run.json"
 
@@ -59,7 +60,11 @@ def create_app(bus: EventBus, startup: Callable[[], Awaitable[None]] | None = No
 
     @app.get("/")
     async def index() -> HTMLResponse:
-        return HTMLResponse(_DASHBOARD.read_text())
+        return HTMLResponse(_DASHBOARD.read_text())  # 2D dashboard (tested fallback)
+
+    @app.get("/3d")
+    async def viz3d() -> HTMLResponse:
+        return HTMLResponse(_VIZ3D.read_text())  # 3D siege, same /ws stream
 
     @app.get("/tier_a.json")
     async def tier_a() -> Response:

@@ -72,6 +72,12 @@
       SPEC_GAMER:    0xb07cff, // purple
       OVERFITTER:    0xffc24f, // amber
       NULL_RETURNER: 0x49e08a, // green
+      // Real RAMPART engine specialties (Seam 2 agent_spawn.specialty values)
+      tamper_harness:   0xff5d5d, // red
+      hardcode_outputs: 0xffc24f, // amber
+      sparse_test_gap:  0x4fd1ff, // cyan
+      scout:            0xb07cff, // purple
+      mimic:            0x49e08a, // green
     };
     function colorForSpecialty(spec) {
       if (spec && SPECIALTY_COLORS[spec] != null) return SPECIALTY_COLORS[spec];
@@ -1154,7 +1160,40 @@
       { type: "robustness_update", held_out_blocked: 0.96, honest_pass: 1.0, probes: 80 },
     ];
 
-    ingestEvents(SAMPLE_EVENTS);
+    // ----------------------------------------------------------------------
+    // Live wiring — render the REAL stream off the server's /ws (golden replay
+    // or live engine). The engine uses dynamic gate ids (e.g. "HumanEval/2");
+    // bridge each onto one of the fixed ring slots on first sight so nothing is
+    // dropped as "unknown gate". The server paces events, so we dispatch on
+    // arrival (no internal EVENT_DELAY_MS loop on the live path).
+    // ----------------------------------------------------------------------
+    const SLOT_IDS = Object.keys(gates);   // ["gate_0" .. "gate_7"]
+    const gateSlots = {};                   // real id -> slot id (stable per gate)
+    let _nextSlot = 0;
+    function slotForGate(realId) {
+      if (!(realId in gateSlots)) {
+        gateSlots[realId] = SLOT_IDS[_nextSlot % SLOT_IDS.length];
+        _nextSlot++;
+      }
+      return gateSlots[realId];
+    }
+    function dispatchLive(event) {
+      if (event.gate != null) event.gate = slotForGate(event.gate);  // map to a real 3D gate
+      dispatch(event);
+    }
+    function connectLive() {
+      const ws = new WebSocket(`ws://${location.host}/ws`);
+      ws.onopen = () => console.log("[siege] live: /ws connected");
+      ws.onmessage = (m) => { try { dispatchLive(JSON.parse(m.data)); } catch (e) { console.error(e); } };
+      ws.onclose = () => setTimeout(connectLive, 1200);  // auto-reconnect
+    }
+
+    // Served over http(s) -> live stream. Opened as a bare file:// -> offline sample demo.
+    if (location.protocol === "http:" || location.protocol === "https:") {
+      connectLive();
+    } else {
+      ingestEvents(SAMPLE_EVENTS);
+    }
 
     // Expose for console poking / later phases.
     window.siege = {

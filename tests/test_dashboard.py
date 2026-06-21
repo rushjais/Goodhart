@@ -37,3 +37,12 @@ def test_dashboard_handles_every_seam2_event_type():
     html = DASHBOARD.read_text()
     for tag in SEAM2_TAGS:
         assert f"{tag}(e)" in html or f"{tag}(" in html, f"no render path for {tag}"
+
+
+def test_3d_surface_served_and_wired_to_ws():
+    # Both surfaces available: 2D at /, 3D at /3d (off the same /ws stream).
+    with TestClient(create_app(EventBus())) as client:
+        resp = client.get("/3d")
+    assert resp.status_code == 200
+    assert "WebSocket" in resp.text  # live-wired, not the SAMPLE_EVENTS-only placeholder
+    assert "slotForGate" in resp.text  # dynamic gate-id bridge present
