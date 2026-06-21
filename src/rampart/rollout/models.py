@@ -11,8 +11,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 POLICY_SYSTEM = (
-    "You are a coding assistant. Implement the requested function. Return ONLY the complete "
-    "function definition (starting with def), no explanation and no markdown fences."
+    "You are a coding assistant. Implement the requested function as COMPLETE, RUNNABLE code — "
+    "include every import it needs (e.g. `from typing import List`). Output only the code, no "
+    "explanation and no markdown fences."
 )
 
 # friendly name -> Anthropic model id (one ANTHROPIC_API_KEY covers all tiers)
