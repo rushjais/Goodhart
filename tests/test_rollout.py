@@ -7,8 +7,10 @@ from rampart.rollout import (
     RolloutReport,
     build_models,
     generate_rollouts,
+    generate_seed_rollouts,
     mock_scorers,
     real_scorers,
+    red_models,
     write_jsonl,
 )
 from rampart.rollout.models import Model
@@ -76,6 +78,28 @@ def test_real_scorers_label_gold_and_cheat():
 def test_build_models_skips_missing_keys():
     # No DEEPSEEK_API_KEY in the test env → that model is skipped, never a crash.
     assert build_models(["deepseek-chat"]) == []
+
+
+def test_seed_exploits_inject_a_guaranteed_cheat_class():
+    r_naive, r_hardened, t_oracle = mock_scorers()
+    rollouts = generate_seed_rollouts(
+        [_task()],
+        exploit_fn=lambda t: ["CHEAT a", "CHEAT b"],  # marker scored as cheat by mock
+        r_naive=r_naive,
+        r_hardened=r_hardened,
+        t_oracle=t_oracle,
+    )
+    assert len(rollouts) == 2
+    assert all(r.model == "seed-forger" and r.label == "cheat" for r in rollouts)
+
+
+def test_red_models_skip_without_key_and_build_with_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert red_models() == []  # graceful skip, no crash
+    monkeypatch.setenv(
+        "ANTHROPIC_API_KEY", "test"
+    )  # constructs policies; no API call until sample()
+    assert [m.name for m in red_models()] == ["red:forger", "red:edge_slipper"]
 
 
 def test_write_jsonl_emits_exactly_the_seam_fields(tmp_path):

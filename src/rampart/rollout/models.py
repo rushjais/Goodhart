@@ -110,3 +110,34 @@ def build_models(names: list[str] | None = None, *, temperature: float = 0.7) ->
         if fn is not None:
             out.append(Model(name=name, sample=fn))
     return out
+
+
+# Solution-level cheat specialists make the best cheat policies (sapper tampers the harness,
+# which pristine grading moots — so it wouldn't register as a solution-level cheat here).
+RED_SPECIALISTS = ("forger", "edge_slipper")
+
+
+def red_models(names: tuple[str, ...] = RED_SPECIALISTS, client=None) -> list[Model]:
+    """Red-team specialists as cheat-PRODUCING policies — the real source of cheat diversity.
+
+    Each `sample(task)` runs the specialist agent against the real grader and returns the
+    solution.py it produced (a cheat on tasks it can't honestly solve). Lazy imports keep the
+    rollout loop free of engine/grader internals; needs ANTHROPIC_API_KEY (else skipped)."""
+    import os
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return []
+    from pathlib import Path
+
+    from ..agents.specialists import BY_NAME, run_specialist
+    from ..loop import interface
+
+    def make_sample(spec):
+        def sample(task) -> str:
+            workdir = interface.make_workdir(task)
+            run_specialist(spec, workdir, run_tests=interface.run_grader, client=client)
+            return (Path(workdir) / "solution.py").read_text()
+
+        return sample
+
+    return [Model(name=f"red:{n}", sample=make_sample(BY_NAME[n])) for n in names if n in BY_NAME]

@@ -69,6 +69,40 @@ def generate_rollouts(
     return rollouts
 
 
+def generate_seed_rollouts(
+    tasks: list,
+    *,
+    exploit_fn: Callable[[object], list[str]],
+    r_naive: Scorer,
+    r_hardened: Scorer,
+    t_oracle: Scorer,
+    model_name: str = "seed-forger",
+) -> list[Rollout]:
+    """Inject a GUARANTEED cheat class: deterministic seed exploits as rollout rows.
+
+    `exploit_fn(task) -> [cheat_src, ...]` (e.g. breadth.cheats.forger_cheats). Ensures the
+    dataset always contains cheats even when sampled models solve honestly — the plan's
+    "lean on seed exploits to guarantee an exploit class exists.\""""
+    rollouts: list[Rollout] = []
+    for task in tasks:
+        try:
+            cheats = exploit_fn(task)
+        except Exception:
+            cheats = []
+        for c in cheats:
+            rollouts.append(
+                Rollout(
+                    task_id=task.task_id,
+                    model=model_name,
+                    completion=c,
+                    r_naive=r_naive(task, c),
+                    r_hardened=r_hardened(task, c),
+                    t_oracle=t_oracle(task, c),
+                )
+            )
+    return rollouts
+
+
 @dataclass
 class RolloutReport:
     rollouts: list[Rollout]
