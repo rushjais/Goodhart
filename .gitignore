@@ -64,6 +64,7 @@ rampart-*.pdf
 PLAN.md
 SKILL.md
 .claude/skills/review/SKILL.md
+.gstack/
 
 # Parallel demo front-end (per-user, untracked while iterating) — siege.html is shared
 viz3d/*
