@@ -94,6 +94,33 @@ def test_build_models_skips_missing_keys():
     assert build_models(["deepseek-chat"]) == []
 
 
+def test_rgtask_task_id_for_the_seam():
+    assert RGTask("gsm_symbolic", 42, 3, "q", "70").task_id == "gsm_symbolic:42:3"
+
+
+def test_build_rg_models_sends_question_with_answer_style_prompt(monkeypatch):
+    # build_rg_models reuses the honest red_rg solve prompt and sends task.question (not .prompt).
+    import rampart.rollout.models as m
+    from rampart.red_rg.core import RED_RG_SYSTEM
+
+    captured = {}
+
+    def fake_anthropic(model_id, temperature, *, system, prompt_fn):
+        def sample(task):
+            captured["system"] = system
+            captured["sent"] = prompt_fn(task)
+            return "ok"
+
+        return sample
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(m, "_anthropic_sampler", fake_anthropic)
+    models = m.build_rg_models(["sonnet"])
+    models[0].sample(RGTask("gsm_symbolic", 42, 0, "how many legs?", "70"))
+    assert captured["system"] == RED_RG_SYSTEM
+    assert captured["sent"] == "how many legs?"  # the question, not a code prompt
+
+
 def test_seed_exploits_inject_a_guaranteed_cheat_class():
     r_naive, r_hardened, t_oracle = mock_scorers()
     rollouts = generate_seed_rollouts(

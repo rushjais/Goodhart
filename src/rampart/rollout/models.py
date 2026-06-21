@@ -46,7 +46,11 @@ class Model:
     sample: Callable[[object], str]  # sample(task) -> solution source
 
 
-def _anthropic_sampler(model_id: str, temperature: float):
+def _prompt_of(task) -> str:
+    return task.prompt
+
+
+def _anthropic_sampler(model_id: str, temperature: float, *, system=POLICY_SYSTEM, prompt_fn=None):
     import os
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -56,21 +60,30 @@ def _anthropic_sampler(model_id: str, temperature: float):
     except ImportError:
         return None
     client = Anthropic(timeout=60, max_retries=2)
+    prompt_fn = prompt_fn or _prompt_of
 
     def sample(task) -> str:
         resp = client.messages.create(
             model=model_id,
             max_tokens=900,
             temperature=temperature,
-            system=POLICY_SYSTEM,
-            messages=[{"role": "user", "content": task.prompt}],
+            system=system,
+            messages=[{"role": "user", "content": prompt_fn(task)}],
         )
         return _strip("".join(b.text for b in resp.content if b.type == "text"))
 
     return sample
 
 
-def _openai_sampler(env_var: str, base_url: str | None, model_id: str, temperature: float):
+def _openai_sampler(
+    env_var: str,
+    base_url: str | None,
+    model_id: str,
+    temperature: float,
+    *,
+    system=POLICY_SYSTEM,
+    prompt_fn=None,
+):
     import os
 
     if not os.environ.get(env_var):
@@ -80,6 +93,7 @@ def _openai_sampler(env_var: str, base_url: str | None, model_id: str, temperatu
     except ImportError:
         return None
     client = OpenAI(base_url=base_url, timeout=60, max_retries=2)
+    prompt_fn = prompt_fn or _prompt_of
 
     def sample(task) -> str:
         resp = client.chat.completions.create(
@@ -87,8 +101,8 @@ def _openai_sampler(env_var: str, base_url: str | None, model_id: str, temperatu
             max_tokens=900,
             temperature=temperature,
             messages=[
-                {"role": "system", "content": POLICY_SYSTEM},
-                {"role": "user", "content": task.prompt},
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt_fn(task)},
             ],
         )
         return _strip(resp.choices[0].message.content or "")
@@ -96,20 +110,47 @@ def _openai_sampler(env_var: str, base_url: str | None, model_id: str, temperatu
     return sample
 
 
-def build_models(names: list[str] | None = None, *, temperature: float = 0.7) -> list[Model]:
-    """Construct the available models from `names`; silently skip any with no key/SDK."""
+def build_models(
+    names: list[str] | None = None,
+    *,
+    temperature: float = 0.7,
+    system=POLICY_SYSTEM,
+    prompt_fn=None,
+) -> list[Model]:
+    """Construct the available models from `names`; silently skip any with no key/SDK.
+
+    `system`/`prompt_fn` override the policy prompt and which task field is sent (default: code
+    from `task.prompt`); `build_rg_models` uses them for the answer-style reasoning-gym policy.
+    """
     out: list[Model] = []
     for name in names or DEFAULT_MODELS:
         if name in _ANTHROPIC:
-            fn = _anthropic_sampler(_ANTHROPIC[name], temperature)
+            fn = _anthropic_sampler(
+                _ANTHROPIC[name], temperature, system=system, prompt_fn=prompt_fn
+            )
         elif name in _OPENAI:
             env_var, base_url, model_id = _OPENAI[name]
-            fn = _openai_sampler(env_var, base_url, model_id, temperature)
+            fn = _openai_sampler(
+                env_var, base_url, model_id, temperature, system=system, prompt_fn=prompt_fn
+            )
         else:
             fn = None
         if fn is not None:
             out.append(Model(name=name, sample=fn))
     return out
+
+
+def build_rg_models(names: list[str] | None = None, *, temperature: float = 0.7) -> list[Model]:
+    """Reasoning-gym policies: send the raw question, ask for an answer (no code).
+
+    Same honest solve prompt as the red_rg honest agent (single source of truth), so a rollout
+    completion is the model's natural answer to the gsm_symbolic problem.
+    """
+    from ..red_rg.core import RED_RG_SYSTEM
+
+    return build_models(
+        names, temperature=temperature, system=RED_RG_SYSTEM, prompt_fn=lambda t: t.question
+    )
 
 
 # Solution-level cheat specialists make the best cheat policies (sapper tampers the harness,

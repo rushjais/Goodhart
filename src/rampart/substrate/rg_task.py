@@ -29,6 +29,11 @@ class RGTask:
     #                     strict on CoT (rejects ~97% of correct step-by-step answers).
     scorer: str = "lenient"
 
+    @property
+    def task_id(self) -> str:
+        """Stable id for the rollout seam (RGTask has no task_id field of its own)."""
+        return f"{self.dataset}:{self.seed}:{self.index}"
+
 
 def load_rg_subset(dataset: str, n: int, seed: int, scorer: str = "lenient") -> list[RGTask]:
     """Load the first `n` reasoning-gym problems for `seed` (generated locally, no network)."""

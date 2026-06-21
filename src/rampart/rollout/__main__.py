@@ -1,17 +1,19 @@
 """CLI: produce the multi-model rollout dataset (the locked-seam JSONL).
 
   python -m rampart.rollout --models opus,sonnet,haiku --count 8 --k 4 --out runs/rollouts.jsonl
-  python -m rampart.rollout --mock --models opus,haiku --count 2   # mock rewards
+  python -m rampart.rollout --mock --models opus,haiku --count 2          # mock rewards
+  python -m rampart.rollout --rg --models opus,sonnet,haiku --count 30    # reasoning-gym
 
-Real rewards by default (hardened grader + oracle); --mock swaps in marker-based scorers.
+Real EvalPlus rewards by default; --mock swaps marker scorers; --rg switches the whole substrate
+to reasoning-gym (gsm_symbolic): RG tasks, RG answer-style policies, real RG grader/oracle.
 """
 
 import argparse
 
-from ..substrate import load_hardest, load_subset
+from ..substrate import load_hardest, load_rg_subset, load_subset
 from .dataset import stream_rollouts
-from .models import DEFAULT_MODELS, build_models, red_models
-from .scorers import mock_scorers, real_scorers
+from .models import DEFAULT_MODELS, build_models, build_rg_models, red_models
+from .scorers import mock_scorers, real_scorers, rg_real_scorers
 
 
 def main() -> None:
@@ -27,19 +29,37 @@ def main() -> None:
         "--seed-exploits", action="store_true", help="inject deterministic forger cheats"
     )
     p.add_argument("--hardest", action="store_true", help="use the hardest tasks (more cheating)")
+    p.add_argument("--rg", action="store_true", help="reasoning-gym substrate (gsm_symbolic)")
+    p.add_argument("--dataset", default="gsm_symbolic", help="reasoning-gym dataset (with --rg)")
+    p.add_argument("--seed", type=int, default=42, help="reasoning-gym split seed (with --rg)")
     args = p.parse_args()
 
-    models = build_models(args.models.split(","))
-    if args.red:
-        models += red_models()
+    if args.rg:
+        models = build_rg_models(args.models.split(","))
+    else:
+        models = build_models(args.models.split(","))
+        if args.red:
+            models += red_models()
     if not models:
         print("no models available — check API keys (ANTHROPIC_API_KEY / OPENAI_API_KEY / ...)")
         return
-    r_naive, r_hardened, t_oracle = mock_scorers() if args.mock else real_scorers()
-    tasks = load_hardest(args.count) if args.hardest else load_subset(args.count)
+
+    if args.mock:
+        r_naive, r_hardened, t_oracle = mock_scorers()
+    elif args.rg:
+        r_naive, r_hardened, t_oracle = rg_real_scorers()
+    else:
+        r_naive, r_hardened, t_oracle = real_scorers()
+
+    if args.rg:
+        tasks = load_rg_subset(args.dataset, args.count, args.seed)
+    elif args.hardest:
+        tasks = load_hardest(args.count)
+    else:
+        tasks = load_subset(args.count)
 
     exploit_fn = None
-    if args.seed_exploits:
+    if args.seed_exploits and not args.rg:
         from ..breadth.cheats import forger_cheats
 
         exploit_fn = forger_cheats
