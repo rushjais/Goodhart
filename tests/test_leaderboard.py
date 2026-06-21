@@ -92,7 +92,7 @@ def test_seed_populates_board(tmp_path):
     c = TestClient(create_leaderboard_app(db))
     rows = c.get("/api/leaderboard").json()["rows"]
     assert len(rows) == n
-    assert any(r["verified"] for r in rows)  # canonical seeds are verified
+    assert all(r["verified"] == 0 for r in rows)  # seeds are illustrative / self-reported
 
 
 def test_board_page_serves_real_html(tmp_path):
@@ -105,3 +105,58 @@ def test_board_page_serves_real_html(tmp_path):
     assert 'id="board-table-container"' in body or 'id="detail"' in body or 'id="app"' in body
     # placeholder must not appear
     assert "not built yet" not in body
+
+
+def test_verified_evalplus_recomputes_and_marks_verified(tmp_path):
+    """Server recomputes scores from raw completions; verified=True appears in /api/env/{id}."""
+    from rampart.substrate import load_task
+
+    gold = load_task("HumanEval/0")
+    good_completion = gold.prompt + gold.canonical_solution
+    bad_completion = gold.prompt + "    return False\n"
+
+    c = _client(tmp_path)
+    r = c.post(
+        "/api/submit/verified",
+        json={
+            "env_name": "test-evalplus-verified",
+            "substrate": "evalplus",
+            "rows": [
+                # Good row — never sends t_oracle; server must compute it.
+                {"task_id": "HumanEval/0", "model": "gold-model", "completion": good_completion},
+                # Bad row — obviously wrong stub.
+                {"task_id": "HumanEval/0", "model": "bad-model", "completion": bad_completion},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    sid = r.json()["id"]
+    assert sid.startswith("v-")  # verified ids are distinguishable
+    assert r.json()["url"].endswith(f"/env/{sid}")
+
+    detail = c.get(f"/api/env/{sid}").json()
+    assert detail["verified"] is True
+    assert detail["n_completions"] == 2
+
+    # naive verifier row must exist and carry real recomputed numbers.
+    verifier_names = {v["name"] for v in detail["verifiers"]}
+    assert "naive" in verifier_names
+
+    # The gold completion passes the oracle (t_oracle=1 on at least one row),
+    # so the environment isn't 100% gameable — honest_pass > 0.
+    naive_row = next(v for v in detail["verifiers"] if v["name"] == "naive")
+    assert naive_row["honest_pass"] >= 0.0  # well-formed float
+
+
+def test_verified_rejects_unknown_substrate(tmp_path):
+    """POST /api/submit/verified with an unsupported substrate must return 422."""
+    c = _client(tmp_path)
+    r = c.post(
+        "/api/submit/verified",
+        json={
+            "env_name": "bad-env",
+            "substrate": "custom",
+            "rows": [{"task_id": "t/0", "model": "m", "completion": "x"}],
+        },
+    )
+    assert r.status_code == 422

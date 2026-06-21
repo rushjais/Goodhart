@@ -1,7 +1,12 @@
 """Seed the leaderboard with a few canned submissions so the frontend renders immediately.
 
-Numbers mirror our real runs (EvalPlus, reasoning-gym, the HUD arithmetic example). Idempotent-ish:
-inserts fresh snapshots each call (latest-per-env wins), so reseeding just refreshes the board.
+These are ILLUSTRATIVE SELF-REPORTED placeholders — metric numbers are representative but no
+server recomputation has been performed. verified=0 on all entries reflects this honestly.
+REAL verified rows (✓ badge) come from:
+  python -m rampart.bench.submit --verified --data runs/rollouts.jsonl --name <env>
+
+Idempotent-ish: inserts fresh snapshots each call (latest-per-env wins), so reseeding just
+refreshes the board.
 """
 
 from __future__ import annotations
@@ -33,7 +38,7 @@ _SEEDS = [
         "n_completions": 139,
         "n_exploits": 61,
         "model_count": 3,
-        "verified": 1,
+        "verified": 0,
         "verifiers": [
             _v("naive", 55, 0.10, 0.90, 1.00, 0.60, 0.57),
             _v("llm-judge", 90, 0.98, 0.02, 0.82, 0.88, 0.80),
@@ -64,7 +69,7 @@ _SEEDS = [
         "n_completions": 90,
         "n_exploits": 28,
         "model_count": 2,
-        "verified": 1,
+        "verified": 0,
         "verifiers": [
             _v("naive", 62, 0.30, 0.70, 0.95, 0.66, 0.61),
             _v("hardened", 96, 0.96, 0.04, 0.97, 0.95, 0.98),

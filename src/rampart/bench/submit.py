@@ -60,6 +60,29 @@ def _examples(rollouts: list[Rollout], per_kind: int = 3) -> list[dict]:
     ]
 
 
+def build_verified_payload(rollouts: list[Rollout], name: str) -> dict:
+    """Build a raw-completion payload for the server-verified path (/api/submit/verified).
+
+    Only works for evalplus / reasoning-gym substrates (the server 422s others).
+    The server recomputes scores from completions and awards the ✓ verified badge.
+    r_naive / r_hardened are included as hints but the server ignores them.
+    """
+    return {
+        "env_name": name,
+        "substrate": _substrate(rollouts[0].task_id),
+        "rows": [
+            {
+                "task_id": r.task_id,
+                "model": r.model,
+                "completion": r.completion,
+                "r_naive": r.r_naive,
+                "r_hardened": r.r_hardened,
+            }
+            for r in rollouts
+        ],
+    }
+
+
 def build_payload(rollouts: list[Rollout], name: str, *, judge: bool = False) -> dict:
     """Score the rollout into a leaderboard submission (no network) — testable on its own."""
     verifiers = [
@@ -81,22 +104,37 @@ def build_payload(rollouts: list[Rollout], name: str, *, judge: bool = False) ->
     }
 
 
-def submit(data: str, name: str, url: str, *, judge: bool = False, dry_run: bool = False):
+def submit(
+    data: str,
+    name: str,
+    url: str,
+    *,
+    judge: bool = False,
+    dry_run: bool = False,
+    verified: bool = False,
+):
     rollouts = load_jsonl(data)
     if not rollouts:
         raise SystemExit(f"no rollouts in {data}")
-    payload = build_payload(rollouts, name, judge=judge)
+    if verified:
+        payload = build_verified_payload(rollouts, name)
+        endpoint = f"{url.rstrip('/')}/api/submit/verified"
+    else:
+        payload = build_payload(rollouts, name, judge=judge)
+        endpoint = f"{url.rstrip('/')}/api/submit"
     if dry_run:
         print(json.dumps(payload, indent=2))
         return None
     req = urllib.request.Request(
-        f"{url.rstrip('/')}/api/submit",
+        endpoint,
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        # Verified submissions recompute every score server-side (sandboxed code execution),
+        # which can take a minute or two on a large dataset — allow for it.
+        with urllib.request.urlopen(req, timeout=300) as resp:
             res = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         raise SystemExit(
@@ -117,8 +155,24 @@ def main() -> None:
     ap.add_argument("--url", default="http://localhost:8100")
     ap.add_argument("--judge", action="store_true", help="add the LLM-judge row (needs API key)")
     ap.add_argument("--dry-run", action="store_true", help="print the payload, don't POST")
+    ap.add_argument(
+        "--verified",
+        action="store_true",
+        help=(
+            "submit raw completions for canonical substrates so the SERVER recomputes scores"
+            " (earns the ✓ verified badge). Only works for evalplus / reasoning-gym;"
+            " the server 422s other substrates."
+        ),
+    )
     args = ap.parse_args()
-    submit(args.data, args.name, args.url, judge=args.judge, dry_run=args.dry_run)
+    submit(
+        args.data,
+        args.name,
+        args.url,
+        judge=args.judge,
+        dry_run=args.dry_run,
+        verified=args.verified,
+    )
 
 
 if __name__ == "__main__":

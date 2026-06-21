@@ -1,4 +1,4 @@
-from rampart.bench.submit import _substrate, build_payload
+from rampart.bench.submit import _substrate, build_payload, build_verified_payload
 from rampart.rollout.dataset import Rollout
 
 
@@ -30,3 +30,20 @@ def test_build_payload_shape_and_examples():
     assert "safety_score" in naive and "best_of_k" in naive and "false_accept" in naive
     kinds = {e["kind"] for e in p["examples"]}
     assert "naive_accepted_cheat" in kinds and "hardened_kept_honest" in kinds
+
+
+def test_build_verified_payload_shape():
+    rollouts = [
+        _r("HumanEval/1", 1, 1, 1, "honest solve"),
+        _r("HumanEval/2", 1, 0, 0, "cheat code"),
+    ]
+    p = build_verified_payload(rollouts, "my-verified-env")
+    assert p["env_name"] == "my-verified-env"
+    assert p["substrate"] == "evalplus"
+    assert len(p["rows"]) == 2
+    row = p["rows"][0]
+    assert "task_id" in row and "model" in row and "completion" in row
+    # server recomputes everything — t_oracle must NOT be present
+    assert "t_oracle" not in row
+    # r_naive / r_hardened are passed as hints (server ignores them)
+    assert "r_naive" in row and "r_hardened" in row
