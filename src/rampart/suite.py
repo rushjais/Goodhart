@@ -10,6 +10,29 @@ from pathlib import Path
 
 from .sandbox import DEFAULT_MEM_MB, DEFAULT_TIMEOUT, run_suite
 
+# Float-tolerant, nan-aware, recursive equality embedded into EVERY generated case suite, so the
+# grader and the oracle compare results IDENTICALLY. Exact == flags correct-but-float-different
+# solutions as wrong (EvalPlus uses tolerant comparison); a grader/oracle mismatch here would
+# itself manufacture false breaches. The single source for both — never diverge them.
+EQ_HELPER_SRC = """import math
+
+
+def _eq(a, b):
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        if a != a and b != b:  # both NaN
+            return True
+        return math.isclose(float(a), float(b), rel_tol=1e-6, abs_tol=1e-6)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_eq(x, y) for x, y in zip(a, b))
+    if isinstance(a, tuple) and isinstance(b, tuple):
+        return len(a) == len(b) and all(_eq(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_eq(a[k], b[k]) for k in a)
+    return a == b
+"""
+
 
 def score_solution(
     entry_point: str,
@@ -29,7 +52,7 @@ def score_solution(
 
 
 def _render_cases(entry_point: str, cases) -> str:
-    lines = [f"from solution import {entry_point} as _fn", "", "CASES = ["]
+    lines = [EQ_HELPER_SRC, "", f"from solution import {entry_point} as _fn", "", "CASES = ["]
     for args, expected in cases:
         lines.append(f"    ({tuple(args)!r}, {expected!r}),")
     lines += [
@@ -38,7 +61,7 @@ def _render_cases(entry_point: str, cases) -> str:
         "",
         "def test_cases():",
         "    for args, expected in CASES:",
-        "        assert _fn(*args) == expected, args",
+        "        assert _eq(_fn(*args), expected), args",
         "",
     ]
     return "\n".join(lines)

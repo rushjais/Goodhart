@@ -10,8 +10,20 @@ from rampart.server.app import create_app
 from rampart.server.bus import EventBus
 from rampart.server.replay import ReplayPublisher
 
-# A small default gate set for the live run; override with --tasks.
-DEFAULT_TASKS = ["HumanEval/0", "HumanEval/2", "HumanEval/4", "HumanEval/8"]
+# The live run defaults to the HARDEST tasks (sparse tests vs tricky logic = where cheats
+# actually surface), so the siege has real gates to breach. Override with --tasks.
+N_DEMO_GATES = 4
+_FALLBACK_TASKS = ["HumanEval/0", "HumanEval/2", "HumanEval/4", "HumanEval/8"]
+
+
+def _default_task_ids(n: int = N_DEMO_GATES) -> list[str]:
+    """The n hardest EvalPlus task ids; falls back to a fixed set if EvalPlus can't load."""
+    try:
+        from rampart.substrate import load_hardest
+
+        return [t.task_id for t in load_hardest(n)]
+    except Exception:
+        return _FALLBACK_TASKS
 
 
 def _ensure_port_free(host: str, port: int) -> None:
@@ -58,7 +70,7 @@ def main() -> None:
                 f"  make demo"
             ) from None
 
-        task_ids = args.tasks.split(",") if args.tasks else DEFAULT_TASKS
+        task_ids = args.tasks.split(",") if args.tasks else _default_task_ids()
         client = maybe_client()
 
         async def startup():
