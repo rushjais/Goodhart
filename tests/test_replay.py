@@ -1,30 +1,48 @@
-"""Track C — the golden run is faithful to the script and replays in order onto the bus."""
+"""Track C — golden_run.jsonl is an honest recording of a real live run and replays in order.
+
+The golden is no longer the scripted fixture (fakes.siege_script) — it's a byte-for-byte
+recording of an actual engine run, so these tests validate its *properties* (valid Seam 2,
+a real before->after climb, honest-pass preserved) rather than equality to any script.
+"""
 
 import asyncio
-import json
 from pathlib import Path
 
-from rampart.server import fakes
 from rampart.server.bus import EventBus, to_wire
 from rampart.server.replay import ReplayPublisher, load_golden
 
 GOLDEN = Path(__file__).resolve().parents[1] / "golden_run.jsonl"
 
 
-def test_golden_file_matches_the_siege_script():
-    on_disk = [json.loads(line) for line in GOLDEN.read_text().splitlines() if line.strip()]
-    assert on_disk == [to_wire(e) for e in fakes.siege_script()]
+def test_golden_is_a_valid_seam2_recording():
+    events = load_golden(GOLDEN)  # from_wire raises on any line not matching the locked schema
+    assert len(events) > 0
+    tags = {to_wire(e)["type"] for e in events}
+    # a real siege: swarm probes, breaches a gate, patches it, seals it, reports robustness
+    assert {
+        "agent_spawn",
+        "agent_move",
+        "breach_found",
+        "patch_applied",
+        "agent_killed",
+        "robustness_update",
+    } <= tags
 
 
-def test_load_golden_validates_every_line_against_seam2():
-    assert load_golden(GOLDEN) == fakes.siege_script()
+def test_golden_shows_a_real_before_after_climb():
+    wire = [to_wire(e) for e in load_golden(GOLDEN)]
+    robust = [e["held_out_blocked"] for e in wire if e["type"] == "robustness_update"]
+    assert len(robust) >= 2
+    assert robust[-1] > robust[0]  # hardened grader beats the naive baseline — a real climb
+    honest = [e["honest_pass"] for e in wire if e["type"] == "robustness_update"]
+    assert all(h == 1.0 for h in honest)  # honest-pass preserved throughout (eval honesty)
 
 
-def test_replay_emits_every_event_in_order():
+def test_replay_emits_the_golden_recording_in_order():
     async def scenario():
         bus = EventBus()
         queue = bus.subscribe()
         await ReplayPublisher(GOLDEN, bus, delay=0.0).run()
         return [queue.get_nowait() for _ in range(queue.qsize())]
 
-    assert asyncio.run(scenario()) == [to_wire(e) for e in fakes.siege_script()]
+    assert asyncio.run(scenario()) == [to_wire(e) for e in load_golden(GOLDEN)]
