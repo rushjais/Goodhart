@@ -528,6 +528,108 @@
       siegeRing.add(wall);
     }
 
+    // ----------------------------------------------------------------------
+    // Siege-field backdrop — atmosphere AROUND the castle, all at R >= 32 (outside the
+    // agent ring at SPAWN_R=28) so it never obscures the keep, agents, labels, or gauges.
+    // Low-poly + instanced; no new assets/CDN (reuses TEX/palette/makeTorch/makeBanner).
+    // ----------------------------------------------------------------------
+    function buildSiegeField() {
+      const field = new THREE.Group();
+      const M = new THREE.Matrix4(), Q = new THREE.Quaternion();
+      const P = new THREE.Vector3(), S = new THREE.Vector3(1, 1, 1);
+
+      // Grass field beyond the dirt courtyard (near stays dirt; far reads battlefield grass).
+      const grass = new THREE.Mesh(
+        new THREE.RingGeometry(SPAWN_R + 4, 120, 48, 1),
+        new THREE.MeshLambertMaterial({ map: TEX.dirt, color: 0x3c4a2c, flatShading: true })
+      );
+      grass.rotation.x = -Math.PI / 2;
+      grass.position.y = 0.02;
+      grass.receiveShadow = true;
+      field.add(grass);
+
+      // Scorched battle patches scattered on the field (cheap dark discs).
+      const scorchMat = new THREE.MeshLambertMaterial({ color: 0x18120e });
+      for (let i = 0; i < 7; i++) {
+        const a = i * 2.39996, r = 31 + (i % 3) * 9;
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(2.2 + (i % 2), 10), scorchMat);
+        disc.rotation.x = -Math.PI / 2;
+        disc.position.set(Math.cos(a) * r, 0.03, Math.sin(a) * r);
+        field.add(disc);
+      }
+
+      // Wooden palisade — angled stakes ringing the field (1 InstancedMesh), gap toward camp.
+      const STAKES = 84, PAL_R = 34;
+      const stakes = new THREE.InstancedMesh(new THREE.ConeGeometry(0.28, 3.0, 5), wood(C.wood), STAKES);
+      let si = 0;
+      for (let i = 0; i < STAKES; i++) {
+        const a = (i / STAKES) * TWO_PI;
+        if (a > 5.6 && a < 6.6) continue; // camp gateway gap
+        P.set(Math.cos(a) * PAL_R, 1.4, Math.sin(a) * PAL_R);
+        Q.setFromEuler(new THREE.Euler(0, -a, 0.1));
+        M.compose(P, Q, S);
+        stakes.setMatrixAt(si++, M);
+      }
+      stakes.count = si;
+      stakes.instanceMatrix.needsUpdate = true;
+      field.add(stakes);
+
+      // Distant tree line — low-poly pines, ringed at R 58-88 (inside the fog → faint).
+      const TREES = 96;
+      const trees = new THREE.InstancedMesh(
+        new THREE.ConeGeometry(2.4, 6.5, 6),
+        new THREE.MeshLambertMaterial({ color: 0x233520, flatShading: true }), TREES);
+      for (let i = 0; i < TREES; i++) {
+        const a = (i / TREES) * TWO_PI + (i % 2 ? 0.05 : 0);
+        const r = 58 + ((i * 37) % 30), h = 0.8 + (i % 3) * 0.25;
+        P.set(Math.cos(a) * r, 3.25 * h, Math.sin(a) * r);
+        Q.identity(); S.set(h, h, h);
+        M.compose(P, Q, S); trees.setMatrixAt(i, M);
+      }
+      S.set(1, 1, 1);
+      trees.instanceMatrix.needsUpdate = true;
+      field.add(trees);
+
+      // Distant dusk hills on the horizon (few big faint silhouettes near the fog far plane).
+      const hillMat = new THREE.MeshLambertMaterial({ color: 0x352b3a, flatShading: true });
+      for (let i = 0; i < 6; i++) {
+        const a = i * 1.05 + 0.3, r = 105 + (i % 2) * 16;
+        const hill = new THREE.Mesh(new THREE.ConeGeometry(30 + i * 4, 16, 8), hillMat);
+        hill.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+        field.add(hill);
+      }
+
+      // Attacker camp in the palisade gap — pavilion tents + banners + torches.
+      const campA = 6.0;
+      const canvasMat = new THREE.MeshLambertMaterial({ map: TEX.dirt, color: 0x6e5a3c, flatShading: true });
+      const roofMat = new THREE.MeshLambertMaterial({ color: C.banner, flatShading: true });
+      for (const [r, off] of [[38, 0], [42, 4], [42, -4], [46, 2], [46, -3]]) {
+        const ang = campA + off * 0.045, x = Math.cos(ang) * r, z = Math.sin(ang) * r;
+        const wallT = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.4, 1.4, 8), canvasMat);
+        wallT.position.set(x, 0.7, z);
+        const roof = new THREE.Mesh(new THREE.ConeGeometry(2.7, 2.4, 8), roofMat);
+        roof.position.set(x, 2.4, z);
+        field.add(wallT, roof);
+      }
+      for (let i = 0; i < 3; i++) {
+        const ang = campA + (i - 1) * 0.08, r = 36 - i;
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 6, 6), wood());
+        pole.position.set(Math.cos(ang) * r, 3, Math.sin(ang) * r);
+        const banner = makeBanner(1.4, 2.6);
+        banner.position.set(Math.cos(ang) * r + 0.7, 4.3, Math.sin(ang) * r);
+        field.add(pole, banner);
+      }
+      for (let i = 0; i < 5; i++) {
+        const ang = campA + (i - 2) * 0.13, r = 33;
+        const torch = makeTorch(1.1);
+        torch.position.set(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+        field.add(torch);
+      }
+
+      scene.add(field);
+    }
+    buildSiegeField();
+
     // Stop point just outside a gate (where an attacker halts).
     function gateAttackPos(id) {
       const a = gates[id].userData.angle;
