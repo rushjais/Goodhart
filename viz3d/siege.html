@@ -16,6 +16,16 @@
     #hud h1 { margin: 0 0 4px; font-size: 14px; font-weight: 600; letter-spacing: .04em; }
     #hud .sub { margin: 0; font-size: 11px; color: #9a8d72; }
     #hud .hint { margin-top: 10px; font-size: 11px; color: #e0a24a; }
+    /* Persistent beat caption (DOM overlay — renders even without WebGL). */
+    #beat {
+      position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+      max-width: 86vw; padding: 9px 20px; border-radius: 9px; z-index: 10;
+      background: rgba(8,12,20,0.82); border: 1px solid #3a3026;
+      color: #f0e6d2; font: 600 15px/1.3 ui-monospace, "SF Mono", Menlo, monospace;
+      letter-spacing: .02em; text-align: center; pointer-events: none; user-select: none;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #beat:empty { display: none; }
   </style>
 
   <!-- Three.js + OrbitControls via CDN import map (no build step). -->
@@ -32,9 +42,10 @@
   <div id="app"></div>
   <div id="hud">
     <h1>GOODHART · SIEGE</h1>
-    <p class="sub">medieval re-skin — set only</p>
+    <p class="sub">medieval re-skin · live</p>
     <p class="hint">drag to orbit · scroll to zoom · open console for the event stream</p>
   </div>
+  <div id="beat"></div>
 
   <script type="module">
     import * as THREE from "three";
@@ -657,34 +668,60 @@
       const inner = new THREE.Group();
       inner.scale.setScalar(CHAR_SCALE);
       group.add(inner);
-      const col = colorForSpecialty(specialty);
 
-      const bodyMat = new THREE.MeshStandardMaterial({
-        color: col, roughness: 0.5, metalness: 0.1, transparent: true,
-      });
-      const body = castReceive(new THREE.Mesh(
-        new THREE.CapsuleGeometry(0.65, 0.9, 6, 16), bodyMat));
-      body.position.y = BODY_CY;
-      inner.add(body);
+      const col = colorForSpecialty(specialty);          // heraldry = agent identity
+      const attacker = /tamper/i.test(specialty || "");  // sapper (breacher) vs scout
 
-      const packMat = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(col).multiplyScalar(0.68).getHex(),
-        roughness: 0.6, metalness: 0.1, transparent: true,
-      });
-      const pack = castReceive(new THREE.Mesh(
-        new THREE.BoxGeometry(0.55, 0.8, 0.34), packMat));
-      pack.position.set(0, BODY_CY, -0.55);
-      inner.add(pack);
+      // Every part's material is transparent + collected so the spawn/kill fade works.
+      const mats = [];
+      const mat = (color, o) => {
+        o = o || {};
+        const m = new THREE.MeshStandardMaterial({
+          color, transparent: true,
+          roughness: o.r != null ? o.r : 0.5, metalness: o.m != null ? o.m : 0.35,
+          emissive: o.e || 0x000000, emissiveIntensity: o.ei || 0,
+        });
+        mats.push(m); return m;
+      };
+      const part = (geo, m, x, y, z, rx, ry, rz) => {
+        const mesh = castReceive(new THREE.Mesh(geo, m));
+        mesh.position.set(x, y, z);
+        mesh.rotation.set(rx || 0, ry || 0, rz || 0);
+        inner.add(mesh); return mesh;
+      };
 
-      const visorMat = new THREE.MeshStandardMaterial({
-        color: 0x223349, roughness: 0.18, metalness: 0.65,
-        emissive: 0x0a1a2e, emissiveIntensity: 0.6, transparent: true,
-      });
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.34, 0.22), visorMat);
-      visor.position.set(0, BODY_CY + 0.28, 0.5);
-      inner.add(visor);
+      const iron = attacker ? 0x2b2f3a : 0x3a4150;       // dark plate vs lighter mail
+      const armor = mat(iron, { r: 0.45, m: 0.7 });
+      const cloth = mat(col, { r: 0.6, m: 0.08 });       // tabard / surcoat in the agent color
 
-      return { group, mats: [bodyMat, packMat, visorMat] };
+      // torso plate + flared heraldic tabard + two greaves (legs)
+      part(new THREE.CapsuleGeometry(0.58, 0.85, 6, 14), armor, 0, BODY_CY, 0);
+      part(new THREE.ConeGeometry(0.8, 1.05, 12), cloth, 0, BODY_CY - 0.6, 0);
+      part(new THREE.CylinderGeometry(0.16, 0.16, 0.7, 8), armor, -0.23, 0.35, 0);
+      part(new THREE.CylinderGeometry(0.16, 0.16, 0.7, 8), armor, 0.23, 0.35, 0);
+
+      // great-helm + dark visor slit
+      part(new THREE.CylinderGeometry(0.33, 0.33, 0.52, 12), armor, 0, BODY_CY + 0.85, 0);
+      const visor = mat(0x10151f, { r: 0.2, m: 0.6, e: 0x0a1a2e, ei: 0.5 });
+      part(new THREE.BoxGeometry(0.5, 0.1, 0.18), visor, 0, BODY_CY + 0.9, 0.28);
+
+      if (attacker) {
+        // crimson plume + a battle-axe (haft + blade) held forward — aggressive breacher
+        const plume = mat(0x9a1f1f, { r: 0.6, m: 0.05, e: 0x3a0000, ei: 0.3 });
+        part(new THREE.ConeGeometry(0.12, 0.6, 8), plume, 0, BODY_CY + 1.4, 0);
+        const haft = mat(0x5a3a1e, { r: 0.85, m: 0.05 });
+        part(new THREE.CylinderGeometry(0.07, 0.07, 1.8, 8), haft, 0.62, BODY_CY + 0.15, 0.22, 0, 0, -0.5);
+        const blade = mat(0xb9c2cf, { r: 0.25, m: 0.85 });
+        part(new THREE.BoxGeometry(0.55, 0.5, 0.08), blade, 1.0, BODY_CY + 0.65, 0.22, 0, 0, -0.5);
+      } else {
+        // pointed scout's hood + a raised spyglass (probing, no weapon)
+        const hood = mat(new THREE.Color(col).multiplyScalar(0.8).getHex(), { r: 0.7, m: 0.05 });
+        part(new THREE.ConeGeometry(0.42, 0.8, 12), hood, 0, BODY_CY + 1.25, 0);
+        const glass = mat(0x6a4a22, { r: 0.6, m: 0.2 });
+        part(new THREE.CylinderGeometry(0.06, 0.09, 0.75, 8), glass, 0.5, BODY_CY + 0.7, 0.45, 0.6, 0, 0.3);
+      }
+
+      return { group, mats };
     }
 
     function setOpacity(mats, o) { for (const m of mats) m.opacity = o; }
@@ -729,9 +766,37 @@
     // ----------------------------------------------------------------------
     // Agent registry + lifecycle. (UNCHANGED.)
     // ----------------------------------------------------------------------
-    const agents = new Map();    // name -> { group, mats, motion, dead, specialty }
+    const agents = new Map();    // name -> { group, mats, motion, dead, specialty, label, breached }
     let spawnCount = 0;
     const GOLDEN = 2.39996323;   // spreads spawn points evenly around the edge
+
+    // Billboard text label above an agent (CanvasTexture sprite — offline, no CDN).
+    function roundRect(ctx, x, y, w, h, r) {
+      ctx.beginPath(); ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+    }
+    function makeLabel() {
+      const c = document.createElement("canvas"); c.width = 512; c.height = 128;
+      const ctx = c.getContext("2d");
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const sprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+      sprite.scale.set(7, 1.75, 1); sprite.position.y = 5.0; sprite.visible = false;
+      function set(text, color) {
+        ctx.clearRect(0, 0, 512, 128);
+        ctx.font = 'bold 46px ui-monospace, "SF Mono", Menlo, monospace';
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        const w = Math.min(504, ctx.measureText(text).width + 44);
+        ctx.fillStyle = "rgba(8,12,20,0.82)"; roundRect(ctx, (512 - w) / 2, 34, w, 60, 12); ctx.fill();
+        ctx.fillStyle = color || "#f0e6d2"; ctx.fillText(text, 256, 64);
+        tex.needsUpdate = true; sprite.visible = true;
+      }
+      return { sprite, set };
+    }
+    function setAgentLabel(name, text, color) {
+      const a = agents.get(name); if (a && a.label) a.label.set(text, color);
+    }
 
     function spawnAgent(name, specialty) {
       if (agents.has(name)) return;
@@ -747,7 +812,9 @@
       setOpacity(mats, 0);
       scene.add(group);
 
-      const agent = { group, mats, motion: null, dead: false, specialty };
+      const label = makeLabel();
+      group.add(label.sprite);
+      const agent = { group, mats, motion: null, dead: false, specialty, label, breached: false };
       agents.set(name, agent);
 
       addTween({
@@ -1001,10 +1068,16 @@
     // Event handlers.
     // ----------------------------------------------------------------------
     function onAgentSpawn(ev) { spawnAgent(ev.agent, ev.specialty); }
-    function onAgentMove(ev)  { moveAgent(ev.agent, ev.gate); }
+    function onAgentMove(ev)  {
+      moveAgent(ev.agent, ev.gate);
+      setAgentLabel(ev.agent, "scanning " + (ev.realGate || ev.gate), "#ffcf5c");
+    }
 
     // Breach = the agent SLIPS THROUGH a leaky gate to the inside.
     function onBreachFound(ev) {
+      const _a = agents.get(ev.agent);
+      if (_a) _a.breached = true;  // so it's never tagged "found nothing"
+      setAgentLabel(ev.agent, "BREACH — grader " + ev.grader_score + " / oracle " + ev.oracle_score, "#ff5d6c");
       const gate = gates[ev.gate];
       if (!gate) return;
       setGateStatus(gate, "breached");
@@ -1065,6 +1138,7 @@
         p.y = 2.0;
         sealFlash(p, 0x46e85f);
       }
+      setAgentLabel(ev.agent, "exploit killed", "#37e0a6");
       killAgent(ev.agent);
     }
 
@@ -1178,8 +1252,24 @@
       }
       return gateSlots[realId];
     }
+    // Persistent DOM caption — names the current beat from the REAL event fields.
+    // Runs BEFORE the gate-id remap, so event.gate is still the real "HumanEval/N".
+    function setBeat(e) {
+      const el = document.getElementById("beat"); if (!el) return;
+      const a = e.agent, g = e.gate;
+      let t = "";
+      if (e.type === "agent_spawn") t = a + " (" + e.specialty + ") joins the siege";
+      else if (e.type === "agent_move") t = a + " scanning " + g;
+      else if (e.type === "breach_found") t = a + " breached " + g + " — grader " + e.grader_score + " / oracle " + e.oracle_score + " (reward hack)";
+      else if (e.type === "patch_applied") t = g + " patched — gate sealed";
+      else if (e.type === "patch_rejected") t = g + " patch rejected — would break honest work";
+      else if (e.type === "agent_killed") t = a + "'s exploit killed";
+      else if (e.type === "robustness_update") t = "robustness " + Math.round(e.held_out_blocked * 100) + "% · honest-pass " + Math.round(e.honest_pass * 100) + "%";
+      if (t) el.textContent = t;
+    }
     function dispatchLive(event) {
-      if (event.gate != null) event.gate = slotForGate(event.gate);  // map to a real 3D gate
+      setBeat(event);  // real fields, real gate id
+      if (event.gate != null) { event.realGate = event.gate; event.gate = slotForGate(event.gate); }
       dispatch(event);
     }
 
@@ -1190,9 +1280,14 @@
     const LIVE_STEP_MS = 900;  // ~0.9s/event -> 27-event curated run plays over ~24s
     function _drainNext() {
       const ev = _liveQueue.shift();
-      if (ev === undefined) { _draining = false; return; }
+      if (ev === undefined) { _draining = false; _onDrainEnd(); return; }
       dispatchLive(ev);
       setTimeout(_drainNext, LIVE_STEP_MS);
+    }
+    function _onDrainEnd() {  // an agent that probed but never breached = the real failed probe
+      for (const [name, a] of agents) {
+        if (!a.dead && !a.breached) setAgentLabel(name, "found nothing", "#8190ab");
+      }
     }
     function connectLive() {
       const ws = new WebSocket(`ws://${location.host}/ws`);
