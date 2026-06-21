@@ -8,7 +8,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RAMPART — verifier-safety leaderboard</title>
+<title>Goodhart — verifier-safety leaderboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;900&family=EB+Garamond:ital@0;1&family=UnifrakturMaguntia&display=swap" rel="stylesheet" />
 <style>
   :root {
     --bg:#0a0e17; --panel:#121829; --ink:#e8edf7; --muted:#8190ab;
@@ -17,7 +20,7 @@
   * { box-sizing:border-box; }
   body {
     margin:0; background:var(--bg); color:var(--ink);
-    font:15px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font:16px/1.5 "EB Garamond", Georgia, serif;
     -webkit-font-smoothing:antialiased;
   }
   a { color:var(--good); text-decoration:none; }
@@ -29,8 +32,11 @@
     border-bottom:1px solid var(--line); flex-wrap:wrap;
   }
   .brand { display:flex; flex-direction:column; justify-content:center; }
-  .brand h1 { margin:0; font-size:20px; letter-spacing:.14em; font-weight:700; }
-  .brand .sub { color:var(--muted); font-size:12px; letter-spacing:.05em; margin-top:3px; }
+  .brand h1 { margin:0; font:400 34px/.9 "UnifrakturMaguntia", serif; letter-spacing:.01em;
+    background:linear-gradient(180deg,#f0d896,#caa24b 55%,#8a6a2c);
+    -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .brand .sub { color:var(--muted); font:600 10px/1 "Cinzel", serif; letter-spacing:.18em;
+    text-transform:uppercase; margin-top:5px; }
   .back-link { font-size:12px; color:var(--muted); margin-left:auto; }
   .back-link a { color:var(--muted); }
   .back-link a:hover { color:var(--ink); }
@@ -205,6 +211,13 @@
 
   /* loading / error states */
   .status-msg { padding:40px 30px; color:var(--muted); font-size:13px; }
+
+  /* ── medieval type, to match the siege ── */
+  th, .section-h, .group-hdr td, .cc-title, .cc-foot, .meta-item .lbl, .stat-chip span,
+  .substrate-badge, .chip-verified, .chip-self, .sort-lbl { font-family:"Cinzel", serif; }
+  .cc-before, .cc-after, .meta-item .val, .stat-chip b, .safety-val, .gameable-val,
+  .verifier-table td:first-child, .headline-sentence { font-family:"Cinzel", serif; }
+  .completion-text { font-family:ui-monospace, "SF Mono", monospace; }  /* code stays mono */
 </style>
 </head>
 <body>

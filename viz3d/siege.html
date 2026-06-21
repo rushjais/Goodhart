@@ -32,10 +32,23 @@
     }
     #beat:empty { display: none; }
 
-    /* ── live metrics HUD (medieval plaques, top-right) ── */
-    #stats { position: fixed; top: 16px; right: 16px; z-index: 10;
-             display: flex; flex-direction: column; gap: 10px; align-items: flex-end;
-             pointer-events: none; user-select: none; }
+    /* ── right sidebar: metric plaques + an ongoing chronicle ── */
+    #sidebar { position: fixed; top: 14px; right: 14px; bottom: 14px; width: 312px; z-index: 10;
+               display: flex; flex-direction: column; gap: 12px; pointer-events: none; user-select: none; }
+    #stats { display: flex; flex-direction: column; gap: 10px; align-items: stretch; flex-shrink: 0; }
+    .log-h { font: 600 10px/1 "Cinzel", serif; letter-spacing: .18em; text-transform: uppercase;
+             color: #828c99; padding: 2px 4px; flex-shrink: 0; }
+    #log { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+           gap: 1px; background: linear-gradient(180deg, #1a1f28, #11151b);
+           border: 1px solid #2a313b; border-radius: 10px; padding: 8px 4px; }
+    #log .row { font: 13px/1.35 "EB Garamond", serif; color: #b3bcc8; padding: 5px 12px;
+                border-left: 3px solid transparent; opacity: 0; animation: logslide .3s forwards; }
+    @keyframes logslide { to { opacity: 1; } }
+    #log .row.breach { border-color: #c0392b; color: #e0a59c; }
+    #log .row.patch  { border-color: #6fae86; }
+    #log .row.reject { border-color: #e0863a; }
+    #log .row.kill   { border-color: #6fae86; }
+    #log .row.robust { border-color: #caa24b; color: #d8cba0; }
     #stats .plaque { min-width: 168px; padding: 11px 18px; text-align: right;
       background: linear-gradient(180deg, #1c222b, #11151b);
       border: 1px solid #2a313b; border-radius: 8px;
@@ -72,23 +85,26 @@
     <p class="sub">the grader siege</p>
     <p class="hint">drag to orbit · scroll to zoom · open console for the event stream</p>
   </div>
-  <div id="beat"></div>
-  <div id="stats">
-    <div class="plaque hold">
-      <div class="v" id="s-wall">—</div>
-      <div class="k">the wall holds</div>
-      <div class="d" id="s-wall-d"></div>
+  <aside id="sidebar">
+    <div id="stats">
+      <div class="plaque hold">
+        <div class="v" id="s-wall">—</div>
+        <div class="k">the wall holds</div>
+        <div class="d" id="s-wall-d"></div>
+      </div>
+      <div class="plaque">
+        <div class="v good" id="s-honest">—</div>
+        <div class="k">honest admitted</div>
+      </div>
+      <div class="plaque">
+        <div class="v warn" id="s-spoils">—</div>
+        <div class="k">spoils if gamed</div>
+      </div>
+      <div class="counts" id="s-counts">0 breached · 0 sealed · 0 probes</div>
     </div>
-    <div class="plaque">
-      <div class="v good" id="s-honest">—</div>
-      <div class="k">honest admitted</div>
-    </div>
-    <div class="plaque">
-      <div class="v warn" id="s-spoils">—</div>
-      <div class="k">spoils if gamed</div>
-    </div>
-    <div class="counts" id="s-counts">0 breached · 0 sealed · 0 probes</div>
-  </div>
+    <div class="log-h">The chronicle</div>
+    <div id="log"></div>
+  </aside>
 
   <script type="module">
     import * as THREE from "three";
@@ -552,8 +568,8 @@
       }
 
       // A warm torch-pool light at every gate (like the central brazier) so each gate is well lit.
-      const gateLight = new THREE.PointLight(C.torch, 6.5, 26, 2);
-      gateLight.position.set(0, 5.4, 2.6);
+      const gateLight = new THREE.PointLight(C.torch, 34, 56, 2);
+      gateLight.position.set(0, 3.0, 5.0);   // out in front, at wall-face height → lights the OUTER face
       gate.add(gateLight);
 
       return gate;
@@ -568,10 +584,10 @@
       wall.add(body);
       addWallMerlons(wall, { length, y: 3.45, size: 0.7, mat: stone(C.stoneLight) });
 
-      // A torch partway along the outer face.
+      // A torch on the OUTER face, with a strong warm light so the perimeter is lit.
       const torch = makeTorch(0.85);
       torch.position.set(0, 2.4, 0.85);
-      wall.add(torch);
+      wall.add(torch);   // the outer torch RING (added at assembly) lights these walls from outside
       return wall;
     }
 
@@ -603,6 +619,20 @@
       wall.position.set(Math.cos(m) * chordR, 0, Math.sin(m) * chordR);
       wall.lookAt(0, 0, 0); // local X runs tangentially along the chord
       siegeRing.add(wall);
+    }
+
+    // Free-standing torches ringing the OUTSIDE of the castle (out by the stakes). World-space —
+    // no gate-local orientation to fight — so these reliably light the outer walls + the approach.
+    const OUTER_TORCHES = 10, OUTER_R = RING_R + 8;   // ~27, just outside the wall
+    for (let i = 0; i < OUTER_TORCHES; i++) {
+      const a = (i / OUTER_TORCHES) * TWO_PI + Math.PI / OUTER_TORCHES;
+      const ox = Math.cos(a) * OUTER_R, oz = Math.sin(a) * OUTER_R;
+      const ot = makeTorch(1.4);
+      ot.position.set(ox, 0, oz);
+      scene.add(ot);
+      const ol = new THREE.PointLight(C.torch, 36, 54, 2);
+      ol.position.set(ox, 3.4, oz);
+      scene.add(ol);
     }
 
     // ----------------------------------------------------------------------
@@ -667,11 +697,12 @@
       trees.instanceMatrix.needsUpdate = true;
       field.add(trees);
 
-      // Distant dusk hills on the horizon (few big faint silhouettes near the fog far plane).
+      // Distant dusk mountains ringing the WHOLE horizon, slightly bigger.
       const hillMat = new THREE.MeshLambertMaterial({ color: 0x352b3a, flatShading: true });
-      for (let i = 0; i < 6; i++) {
-        const a = i * 1.05 + 0.3, r = 105 + (i % 2) * 16;
-        const hill = new THREE.Mesh(new THREE.ConeGeometry(30 + i * 4, 16, 8), hillMat);
+      const HILLS = 11;
+      for (let i = 0; i < HILLS; i++) {
+        const a = (i / HILLS) * TWO_PI + (i % 2 ? 0.17 : 0), r = 112 + (i % 3) * 14;
+        const hill = new THREE.Mesh(new THREE.ConeGeometry(38 + (i % 4) * 6, 23 + (i % 3) * 5, 8), hillMat);
         hill.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
         field.add(hill);
       }
@@ -1671,17 +1702,22 @@
     // Persistent DOM caption — names the current beat from the REAL event fields.
     // Runs BEFORE the gate-id remap, so event.gate is still the real "HumanEval/N".
     function setBeat(e) {
-      const el = document.getElementById("beat"); if (!el) return;
+      const box = document.getElementById("log"); if (!box) return;
       const a = e.agent, g = e.gate;
-      let t = "";
+      let t = "", cls = "";
       if (e.type === "agent_spawn") t = a + " (" + e.specialty + ") joins the siege";
       else if (e.type === "agent_move") t = a + " scanning " + g;
-      else if (e.type === "breach_found") t = a + " breached " + g + " — passed grader, failed oracle · cheat: " + (e.example || "(n/a)");
-      else if (e.type === "patch_applied") t = g + " sealed — " + (e.technique || "patch applied");
-      else if (e.type === "patch_rejected") t = g + " patch rejected — " + (e.reason || "would break honest work");
-      else if (e.type === "agent_killed") t = a + "'s exploit killed";
-      else if (e.type === "robustness_update") t = "robustness " + Math.round(e.held_out_blocked * 100) + "% · honest-pass " + Math.round(e.honest_pass * 100) + "%";
-      if (t) el.textContent = t;
+      else if (e.type === "breach_found") { t = a + " breached " + g + " — passed grader, failed oracle"; cls = "breach"; }
+      else if (e.type === "patch_applied") { t = g + " sealed — " + (e.technique || "patch applied"); cls = "patch"; }
+      else if (e.type === "patch_rejected") { t = g + " patch rejected — " + (e.reason || "would break honest work"); cls = "reject"; }
+      else if (e.type === "agent_killed") { t = a + "'s exploit killed"; cls = "kill"; }
+      else if (e.type === "robustness_update") { t = "robustness " + Math.round(e.held_out_blocked * 100) + "% · honest-pass " + Math.round(e.honest_pass * 100) + "%"; cls = "robust"; }
+      if (!t) return;
+      const row = document.createElement("div");
+      row.className = "row" + (cls ? " " + cls : "");
+      row.textContent = t;
+      box.prepend(row);                       // newest on top
+      while (box.children.length > 18) box.lastChild.remove();
     }
     function dispatchLive(event) {
       setBeat(event);  // real fields, real gate id
