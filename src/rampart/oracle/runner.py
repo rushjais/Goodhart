@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ..sandbox import DEFAULT_MEM_MB, DEFAULT_TIMEOUT, run_suite
 from ..substrate import Task, expected_outputs
+from ..suite import EQ_HELPER_SRC
 
 
 def run_oracle(
@@ -48,6 +49,7 @@ def _oracle_tests(task: Task) -> str:
     cases = zip(task.plus_input, expected_outputs(task, task.plus_input), strict=True)
     lines = [
         "# Held-out oracle suite (NOT visible to the agent). Built from plus_input.",
+        EQ_HELPER_SRC,
         f"from solution import {task.entry_point} as _fn",
         "",
         "CASES = [",
@@ -60,7 +62,7 @@ def _oracle_tests(task: Task) -> str:
         "",
         "def test_oracle():",
         "    for args, expected in CASES:",
-        "        assert _fn(*args) == expected, args",
+        "        assert _eq(_fn(*args), expected), args",
         "",
     ]
     return "\n".join(lines)
