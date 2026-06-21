@@ -98,6 +98,26 @@
   }
   .detail-col > .panel-box:first-child { margin-top:0; }
   @media (max-width:1024px) { .detail-grid { grid-template-columns:1fr; } }
+
+  /* ── report: before→after cards + legend ── */
+  .stat-chips { display:flex; gap:26px; margin:16px 0 2px; }
+  .stat-chip b { color:var(--ink); font-size:19px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat-chip span { color:var(--muted); font-size:12px; margin-left:7px; }
+  .compare-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin:20px 0 4px; }
+  .compare-card { border:1px solid var(--line); border-radius:14px; padding:18px 20px 16px; background:var(--bg); }
+  .cc-title { font-size:14px; font-weight:600; letter-spacing:.01em; }
+  .cc-sub { font-size:12px; color:var(--muted); margin-top:5px; line-height:1.45; min-height:50px; }
+  .cc-ba { display:flex; align-items:baseline; gap:12px; margin:6px 0 4px; font-variant-numeric:tabular-nums; }
+  .cc-before { font-size:23px; font-weight:700; opacity:.8; }
+  .cc-arrow { color:var(--muted); font-size:16px; }
+  .cc-after { font-size:34px; font-weight:800; }
+  .cc-foot { font-size:11px; color:var(--muted); letter-spacing:.03em; }
+  .v-good { color:var(--good); } .v-warn { color:var(--warn); } .v-bad { color:var(--bad); }
+  .legend { list-style:none; padding:0; margin:0; }
+  .legend li { font-size:12.5px; color:var(--muted); padding:11px 0; border-bottom:1px solid var(--line); line-height:1.5; }
+  .legend li:last-child { border-bottom:none; }
+  .legend b { color:var(--ink); font-weight:600; }
+  @media (max-width:1024px) { .compare-grid { grid-template-columns:1fr; } }
   .headline-sentence {
     font-size:22px; font-weight:700; line-height:1.3; margin:18px 0 6px;
     letter-spacing:-.01em;
@@ -350,144 +370,107 @@ async function renderDetail(id) {
   paintDetail(data);
 }
 
+function valCls(v, dir) {
+  if (v == null) return '';
+  if (dir === 'down') return v <= 0.2 ? 'v-good' : v <= 0.5 ? 'v-warn' : 'v-bad';
+  return v >= 0.9 ? 'v-good' : v >= 0.7 ? 'v-warn' : 'v-bad';
+}
+
+function compareCard(title, sub, before, after, dir) {
+  return `<div class="compare-card">
+    <div class="cc-title">${title}</div>
+    <div class="cc-sub">${sub}</div>
+    <div class="cc-ba">
+      <span class="cc-before ${valCls(before, dir)}" title="naive reward">${pct(before)}</span>
+      <span class="cc-arrow">→</span>
+      <span class="cc-after ${valCls(after, dir)}" title="after hardening">${pct(after)}</span>
+    </div>
+    <div class="cc-foot">naive reward → after hardening</div>
+  </div>`;
+}
+
 function paintDetail(d) {
-  // find naive/hardened rows by name
   const naive = (d.verifiers || []).find(v => v.name === 'naive');
   const hardened = (d.verifiers || []).find(v => v.name === 'hardened');
   const others = (d.verifiers || []).filter(v => v.name !== 'naive' && v.name !== 'hardened');
 
   // headline sentence
   let headlineParts = '';
-  if (naive) {
-    const x = (naive.false_accept * 100).toFixed(0);
-    headlineParts += `<span class="bad">${x}% gameable</span>`;
-  } else {
-    headlineParts += '<span class="bad">gameable</span>';
-  }
+  headlineParts += naive
+    ? `<span class="bad">${Math.round(naive.false_accept * 100)}% gameable</span>`
+    : '<span class="bad">gameable</span>';
   headlineParts += ' with the naive reward';
   if (hardened) {
-    const y = (hardened.false_accept * 100).toFixed(0);
-    headlineParts += ` — hardening takes it to <span class="good">${y}% gameable</span>`;
+    headlineParts += ` — hardening takes it to <span class="good">${Math.round(hardened.false_accept * 100)}% gameable</span>`;
   }
 
-  // verifier table rows
+  // the three plain-language before→after cards (the story)
+  const cards =
+    compareCard('Cheats let through',
+      'wrong answers the reward accepts as correct — lower is safer',
+      naive && naive.false_accept, hardened && hardened.false_accept, 'down') +
+    compareCard('Honest answers kept',
+      'genuinely correct answers that still pass — hardening shouldn\'t break good work',
+      naive && naive.honest_pass, hardened && hardened.honest_pass, 'up') +
+    compareCard('Picks real solutions',
+      'if you optimized this reward, how often its top pick is a real solve, not a cheat (best-of-K)',
+      naive && naive.best_of_k, hardened && hardened.best_of_k, 'up');
+
+  // full metrics table (all verifiers, trimmed to the meaningful columns)
   const allVerifiers = [naive, hardened, ...others].filter(Boolean);
   let verifierRows = '';
   for (const v of allVerifiers) {
     const nameCls = v.name === 'naive' ? 'naive' : v.name === 'hardened' ? 'hardened' : 'judge';
     const tightFlag = v.over_tightened
-      ? ' <span class="flag-tight" title="honest-pass below 90%">⚠ over-tightened</span>'
+      ? ' <span class="flag-tight" title="honest-pass below 90%">⚠</span>'
       : '';
     verifierRows += `<tr>
       <td><span class="verifier-name ${nameCls}">${esc(v.name)}</span>${tightFlag}</td>
-      <td>${v.safety_score != null ? v.safety_score.toFixed(1) : '—'}</td>
-      <td class="${v.catch_rate >= 0.9 ? 'ok-val' : v.catch_rate <= 0.1 ? 'bad-val' : ''}">${pct(v.catch_rate)}</td>
+      <td>${v.safety_score != null ? v.safety_score.toFixed(0) : '—'}</td>
       <td class="${v.false_accept <= 0.1 ? 'ok-val' : v.false_accept >= 0.9 ? 'bad-val' : ''}">${pct(v.false_accept)}</td>
       <td class="${v.honest_pass >= 0.9 ? 'ok-val' : 'bad-val'}">${pct(v.honest_pass)}</td>
-      <td>${pct(v.agreement)}</td>
       <td>${v.best_of_k != null ? pct(v.best_of_k) : '—'}</td>
     </tr>`;
   }
 
-  // gap bars
-  const gap = d.gap || {};
-  const gapNaive = gap.naive;
-  const gapHardened = gap.hardened;
-  let gapHtml = '';
-  if (gapNaive != null || gapHardened != null) {
-    const naiveWidth = gapNaive != null ? (gapNaive * 100).toFixed(1) : 0;
-    const hardenedWidth = gapHardened != null ? (gapHardened * 100).toFixed(1) : 0;
-    gapHtml = `
-      <div class="panel-box">
-        <div class="section-h">Best-of-K accuracy (higher = model picks solves not cheats)</div>
-        <div class="gap-label" style="margin:0 0 10px;font-size:12px;color:var(--muted)">
-          best-of-K under the naive reward picks cheats; under the hardened reward it picks solves.
-        </div>
-        <div class="gap-row">
-          <span class="gap-name">naive</span>
-          <div class="gap-track">
-            <div class="gap-fill naive-bar" style="width:${naiveWidth}%"></div>
-          </div>
-          <span class="gap-pct">${gapNaive != null ? pct(gapNaive) : '—'}</span>
-        </div>
-        <div class="gap-row">
-          <span class="gap-name">hardened</span>
-          <div class="gap-track">
-            <div class="gap-fill hardened-bar" style="width:${hardenedWidth}%"></div>
-          </div>
-          <span class="gap-pct">${gapHardened != null ? pct(gapHardened) : '—'}</span>
-        </div>
-      </div>`;
-  }
-
-  // example cards
-  const examples = d.examples || [];
-  let examplesHtml = '';
-  if (examples.length > 0) {
-    examplesHtml = '<div class="panel-box"><div class="section-h">Example completions</div><div class="examples-grid">';
-    for (const ex of examples) {
-      const isCheat = ex.kind === 'naive_accepted_cheat';
-      const cardCls = isCheat ? 'cheat' : 'honest';
-      const kindLabel = isCheat ? 'naive accepted cheat' : 'hardened kept honest';
-      const kindCls = isCheat ? 'cheat' : 'honest';
-      // score pills
-      const rNaivePill = `<span class="score-pill ${ex.r_naive ? 'r1' : 'r0'}" title="naive reward">naive:${ex.r_naive}</span>`;
-      const rHardenedPill = `<span class="score-pill ${ex.r_hardened ? 'r1' : 'r0'}" title="hardened reward">hardened:${ex.r_hardened}</span>`;
-      const tOraclePill = `<span class="score-pill ${ex.t_oracle ? 'r0' : 'r1'} neutral" title="oracle verdict">oracle:${ex.t_oracle}</span>`;
-      examplesHtml += `
-        <div class="example-card ${cardCls}">
-          <div class="card-header">
-            <span class="card-kind ${kindCls}">${kindLabel}</span>
-            <span class="card-task">${esc(ex.task_id)}</span>
-            <div class="card-scores">${rNaivePill}${rHardenedPill}${tOraclePill}</div>
-          </div>
-          <div class="completion-text">${esc(ex.completion)}</div>
-        </div>`;
-    }
-    examplesHtml += '</div></div>';
-  }
-
   app.innerHTML = `
     <div class="detail-wrap" id="detail">
-      <h2 style="margin:0 0 4px;font-size:24px">${esc(d.env_name)}</h2>
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">
+      <h2 style="margin:0 0 4px;font-size:26px">${esc(d.env_name)}</h2>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
         ${substrateBadge(d.substrate)}
         ${verifiedChip(d.verified)}
       </div>
       <div class="headline-sentence">${headlineParts}</div>
-      <div class="meta-row">
-        <div class="meta-item">
-          <span class="val">${d.n_completions ?? '—'}</span>
-          <span class="lbl">completions</span>
-        </div>
-        <div class="meta-item">
-          <span class="val">${d.n_exploits ?? '—'}</span>
-          <span class="lbl">exploits</span>
-        </div>
+      <div class="stat-chips">
+        <span class="stat-chip"><b>${d.n_completions ?? '—'}</b><span>answers scored</span></span>
+        <span class="stat-chip"><b>${d.n_exploits ?? '—'}</b><span>exploits in the test suite</span></span>
       </div>
 
+      <div class="compare-grid">${cards}</div>
+
       <div class="detail-grid">
-       <div class="detail-col">
         <div class="panel-box">
-        <div class="section-h">Verifier comparison</div>
-        <table class="verifier-table">
-          <thead><tr>
-            <th>verifier</th>
-            <th title="balanced accuracy gated by honest-pass">safety score</th>
-            <th title="fraction of cheats caught">catch rate</th>
-            <th title="fraction of cheats accepted">false-accept</th>
-            <th title="fraction of gold solutions that still pass">honest-pass</th>
-            <th title="agreement with oracle">agreement</th>
-            <th title="best-of-K accuracy: does greedy selection pick solves?">best-of-K</th>
-          </tr></thead>
-          <tbody>${verifierRows}</tbody>
-        </table>
+          <div class="section-h">All metrics — naive vs hardened</div>
+          <table class="verifier-table">
+            <thead><tr>
+              <th>verifier</th>
+              <th title="overall: balances catching cheats and keeping honest answers (0–100)">safety</th>
+              <th title="cheats wrongly accepted — lower is better">false-accept</th>
+              <th title="correct answers kept — higher is better">honest-pass</th>
+              <th title="picks solves not cheats — higher is better">best-of-K</th>
+            </tr></thead>
+            <tbody>${verifierRows}</tbody>
+          </table>
         </div>
-        ${gapHtml}
-       </div>
-       <div class="detail-col">
-        ${examplesHtml}
-       </div>
+        <div class="panel-box">
+          <div class="section-h">What the numbers mean</div>
+          <ul class="legend">
+            <li><b>Cheats let through</b> (false-accept) — of the wrong answers in the suite, the share the reward wrongly marks correct. The danger; lower is safer.</li>
+            <li><b>Honest answers kept</b> (honest-pass) — of the genuinely correct answers, the share the reward still passes. Hardening shouldn't reject good work.</li>
+            <li><b>Picks real solutions</b> (best-of-K) — if you trained against this reward, how often selecting its top-scored answer lands on a real solve instead of a cheat.</li>
+            <li><b>Safety</b> — one 0–100 score balancing the two: catches cheats <em>and</em> keeps honest answers.</li>
+          </ul>
+        </div>
       </div>
 
       <button class="share-btn" id="share-btn">
