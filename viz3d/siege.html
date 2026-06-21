@@ -1045,28 +1045,40 @@
       if (!gates[gateId]) { console.warn("[siege] unknown gate:", gateId); return; }
       if (agent.motion) removeTween(agent.motion);
 
+      // Move along an ARC at radius >= ATTACK_R (outside the wall) instead of a straight
+      // chord that would clip through the stone. Polar interpolation: sweep the angle, ease
+      // the radius to the gate's exterior face — the path never dips inside the castle.
       const from = agent.group.position.clone();
-      const to = gateAttackPos(gateId);
-      const dist = Math.hypot(to.x - from.x, to.z - from.z);
-      const dur = Math.min(1.8, Math.max(1.0, dist / 13)); // ~constant speed glide
-      const startH = agent.group.rotation.y;
-      const targetH = headingTo(to.x - from.x, to.z - from.z);
-      const cycles = Math.max(2, Math.round(dist / 2.2)); // walk-bob steps
+      const r0 = Math.max(Math.hypot(from.x, from.z), 0.001);
+      const a0 = Math.atan2(from.z, from.x);
+      const aT = gates[gateId].userData.angle;
+      let dA = aT - a0;
+      dA = Math.atan2(Math.sin(dA), Math.cos(dA));   // shortest way around the ring
+      const rT = ATTACK_R;                           // stop at the gate's outer face
+      const dist = Math.abs(dA) * ((r0 + rT) / 2) + Math.abs(rT - r0);
+      const dur = Math.min(2.2, Math.max(1.0, dist / 13));
+      const cycles = Math.max(2, Math.round(dist / 2.2));
+      let lastX = from.x, lastZ = from.z, lastH = agent.group.rotation.y;
 
       agent.motion = addTween({
         dur, ease: easeInOutCubic,
         onUpdate: (e, k) => {
-          agent.group.position.x = from.x + (to.x - from.x) * e;
-          agent.group.position.z = from.z + (to.z - from.z) * e;
+          const ang = a0 + dA * e;
+          const rad = r0 + (rT - r0) * e;            // stays within [ATTACK_R, r0] >= wall radius
+          const x = Math.cos(ang) * rad, z = Math.sin(ang) * rad;
           const wob = Math.sin(k * Math.PI * cycles * 2);
-          agent.group.position.y = Math.abs(wob) * 0.12;       // little hop bob
-          agent.group.rotation.z = wob * 0.05;                 // side waddle
-          agent.group.rotation.y = lerpAngle(startH, targetH, Math.min(1, k / 0.22));
+          agent.group.position.set(x, Math.abs(wob) * 0.12, z);
+          const dx = x - lastX, dz = z - lastZ;      // face the direction of travel
+          if (dx * dx + dz * dz > 1e-5) lastH = headingTo(dx, dz);
+          agent.group.rotation.y = lerpAngle(agent.group.rotation.y, lastH, 0.3);
+          agent.group.rotation.z = wob * 0.05;
+          lastX = x; lastZ = z;
         },
         onComplete: () => {
-          agent.group.position.set(to.x, 0, to.z);
+          const x = Math.cos(aT) * rT, z = Math.sin(aT) * rT;
+          agent.group.position.set(x, 0, z);
           agent.group.rotation.z = 0;
-          agent.group.rotation.y = targetH;
+          agent.group.rotation.y = headingTo(-x, -z); // end facing the gate (toward centre)
           agent.motion = null;
         },
       });
