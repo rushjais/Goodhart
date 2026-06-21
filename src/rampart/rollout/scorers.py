@@ -87,3 +87,35 @@ def real_scorers() -> tuple[Scorer, Scorer, Scorer]:
         )
 
     return r_naive, r_hardened, t_oracle
+
+
+def rg_real_scorers() -> tuple[Scorer, Scorer, Scorer]:
+    """Reward scorers over the REAL reasoning-gym grader + oracle (the RGTask swap-in provider).
+
+    r_naive    = lenient substring grader (reasoning-gym's default scorer, binarized);
+    r_hardened = the same grader cue-patched (REQUIRE_CUE);
+    t_oracle   = the strict final-number oracle.
+
+    Eval honesty: grader and oracle are disjoint by construction (different parse rules), and the
+    oracle is the FINAL scorer only — it is never exposed to a policy or used to select.
+    """
+    from ..grader.spec import Grader
+    from ..substrate import rg_oracle
+    from ..templates import REQUIRE_CUE, apply_patch, grade
+
+    def _safe(fn) -> int:
+        try:
+            return fn()
+        except Exception:
+            return 0
+
+    def r_naive(task, c: str) -> int:
+        return _safe(lambda: grade(Grader(task), c))
+
+    def r_hardened(task, c: str) -> int:
+        return _safe(lambda: grade(apply_patch(Grader(task), REQUIRE_CUE, {}), c))
+
+    def t_oracle(task, c: str) -> int:
+        return _safe(lambda: rg_oracle(task, c))
+
+    return r_naive, r_hardened, t_oracle
