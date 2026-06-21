@@ -76,6 +76,9 @@ class SealResult:
     template_id: str | None = None
     grader_prime: Any = None
     reason: str = ""
+    honest_pass: float = (
+        1.0  # measured by the seal: gold's pass-rate under grader' (gate keeps it 1.0)
+    )
 
 
 @dataclass
@@ -151,6 +154,7 @@ def run_conductor(
     mem = SharedMemory.new(gates, [s.cheat_type for s in taxonomy])
     probes = 0
     baseline_emitted = False
+    honest_pass = 1.0  # gold's pass-rate; starts 1.0 (naive accepts gold), updated from each seal
 
     while (cell := mem.next_cell()) is not None:  # ALLOCATE (+ diversify via next_cell)
         gate, cheat_type = cell
@@ -175,13 +179,18 @@ def run_conductor(
         emit(BreachFound(spec.name, gate, cheat_type, 1, 0, rec.example))
 
         # The real pre-seal 'before', emitted once: naive grader accepts every breach -> 0.0.
+        # honest_pass = 1.0 here is a real property, not a constant: the gold passes the naive
+        # base tests by EvalPlus construction.
         if not baseline_emitted:
-            emit(RobustnessUpdate(baseline_agreement([1] * len(mem.breaches)), 1.0, probes))
+            emit(RobustnessUpdate(baseline_agreement([1] * len(mem.breaches)), honest_pass, probes))
             baseline_emitted = True
 
         result = seal(gate, candidate)
         if result.sealed:
             rec.sealed, rec.grader_prime = True, result.grader_prime
+            honest_pass = (
+                result.honest_pass
+            )  # measured on the gold under grader' (gate keeps it 1.0)
             mem.status[cell] = Status.SEALED
             emit(PatchApplied(gate, result.template_id or ""))
             emit(AgentKilled(spec.name, gate))
@@ -194,6 +203,6 @@ def run_conductor(
         else:
             emit(PatchRejected(gate, result.reason))
 
-        emit(RobustnessUpdate(mem.sealed_breach_fraction(), 1.0, probes))
+        emit(RobustnessUpdate(mem.sealed_breach_fraction(), honest_pass, probes))
 
     return ConductorReport(probes=probes, breaches=list(mem.breaches), memory=mem)

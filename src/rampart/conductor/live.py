@@ -15,6 +15,7 @@ from ..agents.red import DEFAULT_MODEL, SEED_LIST
 from ..agents.specialists import Specialist, run_specialist
 from ..green import harden
 from ..loop import interface
+from ..metrics.agreement import honest_pass
 from ..templates import grade
 from .core import ConductorReport, SealResult, run_conductor
 
@@ -50,7 +51,8 @@ def make_runners(client: Any = None, model: str = DEFAULT_MODEL):
 
     def seal(gate: str, candidate: dict) -> SealResult:
         g = harden(candidate["task"], candidate["source"], candidate["gold"], client=client)
-        return SealResult(g.sealed, g.template_id, g.grader_prime, g.reason)
+        hp = honest_pass(g.grader_prime, [candidate["gold"]]) if g.sealed else 1.0
+        return SealResult(g.sealed, g.template_id, g.grader_prime, g.reason, honest_pass=hp)
 
     def regrade(grader_prime: Any, candidate: dict) -> int:
         return grade(grader_prime, candidate["source"])

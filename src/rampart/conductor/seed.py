@@ -18,6 +18,7 @@ from ..breadth.loop import _split_plus
 from ..gate import regression_gate
 from ..grader.spec import Grader
 from ..loop import interface
+from ..metrics.agreement import honest_pass
 from ..substrate import expected_outputs
 from ..suite import score_solution
 from ..templates import PRISTINE_HELDOUT, apply_patch, grade
@@ -60,7 +61,9 @@ def make_seed_runners():
             Grader(c["task"]), PRISTINE_HELDOUT, {"held_out_inputs": c["harden_inputs"]}
         )
         if regression_gate(gp, c["source"], c["gold"]):
-            return SealResult(True, PRISTINE_HELDOUT, gp)
+            # Measure honest-pass on the gold under the hardened grader (real, not a constant).
+            hp = honest_pass(gp, [c["gold"]])
+            return SealResult(True, PRISTINE_HELDOUT, gp, honest_pass=hp)
         return SealResult(False, reason="patch did not seal the cheat without harming gold")
 
     def regrade(grader_prime: Any, c: dict) -> int:
