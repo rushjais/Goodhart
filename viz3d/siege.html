@@ -1,0 +1,1168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Goodhart — Siege Visualization (medieval re-skin)</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #1a1512; }
+    #app { position: fixed; inset: 0; }
+    #hud {
+      position: fixed; top: 16px; left: 16px; z-index: 10;
+      font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      color: #e8ddc8; pointer-events: none; user-select: none;
+    }
+    #hud h1 { margin: 0 0 4px; font-size: 14px; font-weight: 600; letter-spacing: .04em; }
+    #hud .sub { margin: 0; font-size: 11px; color: #9a8d72; }
+    #hud .hint { margin-top: 10px; font-size: 11px; color: #e0a24a; }
+  </style>
+
+  <!-- Three.js + OrbitControls via CDN import map (no build step). -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="hud">
+    <h1>GOODHART · SIEGE</h1>
+    <p class="sub">medieval re-skin — set only</p>
+    <p class="hint">drag to orbit · scroll to zoom · open console for the event stream</p>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    // ----------------------------------------------------------------------
+    // Palette — medieval dusk: weathered stone, wood, iron, torchlight.
+    // (Stone/wood tints multiply the pixel textures below.)
+    // ----------------------------------------------------------------------
+    const C = {
+      bg:          0x2b2330, // dusk sky
+      ground:      0xffffff, // dirt texture carries the color
+      stoneDark:   0xa49a8c, // wall tint
+      stoneMid:    0xc7bdab, // keep body tint
+      stoneLight:  0xe8dcc4, // battlements / upper tint
+      wood:        0xffffff, // plank texture carries the color
+      iron:        0x2c2c33, // dark iron banding
+      banner:      0x8a2326, // crimson heraldry cloth
+      bannerTrim:  0xd9a531, // gold trim
+      flameOuter:  0xff7a1e, // torch flame
+      flameInner:  0xffd357,
+      torch:       0xff9a44, // warm torch light
+      beacon:      0xffa64d, // warm beacon flame light
+      status:      0x6b6f55, // neutral gate banner (flips red/green later)
+      robust:      0x4f93ff, // robustness fill
+      honest:      0x36d399, // honest-pass fill
+      track:       0x1b2334, // gauge track
+      panel:       0x1c140e, // gauge backing (dark wood)
+    };
+
+    // Adversary specialties → distinct colors (hashed fallback for unknowns).
+    const SPECIALTY_COLORS = {
+      FORGER:        0xff5d5d, // red
+      EDGE_SLIPPER:  0x4fd1ff, // cyan
+      SPEC_GAMER:    0xb07cff, // purple
+      OVERFITTER:    0xffc24f, // amber
+      NULL_RETURNER: 0x49e08a, // green
+    };
+    function colorForSpecialty(spec) {
+      if (spec && SPECIALTY_COLORS[spec] != null) return SPECIALTY_COLORS[spec];
+      let h = 0;
+      const s = String(spec || "");
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+      return new THREE.Color().setHSL((h % 360) / 360, 0.62, 0.6).getHex();
+    }
+
+    const N_GATES = 8;
+    const RING_R  = 19;            // gate ring radius
+    const ATTACK_R = RING_R + 3.2; // where agents stop, just outside a gate
+    const SPAWN_R = 28;            // outer edge where agents appear
+    const TWO_PI  = Math.PI * 2;
+
+    // ----------------------------------------------------------------------
+    // Scene scaffold: renderer, camera, lights, ground, orbit controls.
+    // ----------------------------------------------------------------------
+    const container = document.getElementById("app");
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    container.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(C.bg);
+    scene.fog = new THREE.Fog(C.bg, 58, 150);
+
+    // Perspective camera looking down at the set at a slight angle.
+    const camera = new THREE.PerspectiveCamera(
+      48, window.innerWidth / window.innerHeight, 0.1, 1000
+    );
+    camera.position.set(34, 30, 40);
+
+    // Orbit controls — drag to look around (referenced by the render loop).
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2 - 0.04; // stay above the ground
+    controls.minDistance = 22;
+    controls.maxDistance = 105;
+    controls.target.set(0, 7, 0);
+
+    // Lighting: warm dusk hemisphere + low warm key (shadows) + cool dusk rim.
+    const hemi = new THREE.HemisphereLight(0x6a586a, 0x3a3024, 0.95);
+    scene.add(hemi);
+
+    const key = new THREE.DirectionalLight(0xffb169, 1.55);
+    key.position.set(40, 30, 18); // low dusk sun → long shadows
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.camera.near = 1;
+    key.shadow.camera.far = 180;
+    key.shadow.camera.left = -60;
+    key.shadow.camera.right = 60;
+    key.shadow.camera.top = 60;
+    key.shadow.camera.bottom = -60;
+    key.shadow.bias = -0.0004;
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0x46506e, 0.45);
+    rim.position.set(-28, 18, -26);
+    scene.add(rim);
+
+    // Warm courtyard torch-pools (static fill light around the ring).
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * TWO_PI + Math.PI / 4;
+      const pool = new THREE.PointLight(C.torch, 7, 24, 2);
+      pool.position.set(Math.cos(a) * 13, 5, Math.sin(a) * 13);
+      scene.add(pool);
+    }
+
+    // ----------------------------------------------------------------------
+    // Pixel-art textures — tiny canvases, nearest-neighbor, no mipmaps.
+    // ----------------------------------------------------------------------
+    function pixelTexture(draw, size, repeat) {
+      const c = document.createElement("canvas");
+      c.width = c.height = size;
+      draw(c.getContext("2d"), size);
+      const t = new THREE.CanvasTexture(c);
+      t.magFilter = THREE.NearestFilter;
+      t.minFilter = THREE.NearestFilter;
+      t.generateMipmaps = false;
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(repeat, repeat);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    }
+
+    function drawStone(ctx, S) {
+      const shades = ["#8b857b", "#9b958a", "#a59e91", "#7d776e", "#928c81", "#736d64"];
+      ctx.fillStyle = "#4a463f"; ctx.fillRect(0, 0, S, S); // mortar
+      const bh = 8, bw = 16;
+      for (let row = 0; row * bh < S + bh; row++) {
+        const yy = row * bh, off = (row % 2) ? bw / 2 : 0;
+        for (let bx = -1; bx * bw < S + bw; bx++) {
+          const xx = bx * bw + off;
+          for (let py = 1; py < bh - 1; py++)
+            for (let px = 1; px < bw - 1; px++) {
+              const gx = ((xx + px) % S + S) % S, gy = yy + py;
+              if (gy >= S) continue;
+              ctx.fillStyle = shades[(Math.random() * shades.length) | 0];
+              ctx.fillRect(gx, gy, 1, 1);
+            }
+        }
+      }
+    }
+
+    function drawWood(ctx, S) {
+      const planks = ["#6e4c2c", "#5e3f24", "#7a5430", "#553820", "#684628"];
+      const gap = "#33220f";
+      const pw = 8;
+      for (let p = 0; p * pw < S; p++) {
+        const base = planks[p % planks.length];
+        for (let py = 0; py < S; py++)
+          for (let px = 0; px < pw; px++) {
+            const gx = p * pw + px;
+            if (gx >= S) continue;
+            ctx.fillStyle = px === 0 ? gap : (Math.random() < 0.16 ? gap : base);
+            ctx.fillRect(gx, py, 1, 1);
+          }
+      }
+    }
+
+    function drawDirt(ctx, S) {
+      const shades = ["#3c3328", "#473b2d", "#352c22", "#4a3d2e", "#2e2620"];
+      for (let y = 0; y < S; y++)
+        for (let x = 0; x < S; x++) {
+          ctx.fillStyle = shades[(Math.random() * shades.length) | 0];
+          ctx.fillRect(x, y, 1, 1);
+        }
+    }
+
+    const TEX = {
+      stone: pixelTexture(drawStone, 32, 1),
+      wood:  pixelTexture(drawWood, 32, 1),
+      dirt:  pixelTexture(drawDirt, 32, 28),
+    };
+
+    // ----------------------------------------------------------------------
+    // Material + geometry helpers.
+    // ----------------------------------------------------------------------
+    const stone = (color) =>
+      new THREE.MeshLambertMaterial({ map: TEX.stone, color, flatShading: true });
+    const wood = (color = C.wood) =>
+      new THREE.MeshLambertMaterial({ map: TEX.wood, color, flatShading: true });
+    const iron = () =>
+      new THREE.MeshLambertMaterial({ color: C.iron, flatShading: true });
+
+    function castReceive(mesh) {
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    // Flickering torch flames are collected here and animated in the loop.
+    const flames = [];
+    function makeFlame(s) {
+      const g = new THREE.Group();
+      const outer = new THREE.Mesh(
+        new THREE.ConeGeometry(0.22 * s, 0.62 * s, 6),
+        new THREE.MeshBasicMaterial({ color: C.flameOuter, toneMapped: false })
+      );
+      outer.position.y = 0.30 * s;
+      const inner = new THREE.Mesh(
+        new THREE.ConeGeometry(0.12 * s, 0.38 * s, 6),
+        new THREE.MeshBasicMaterial({ color: C.flameInner, toneMapped: false })
+      );
+      inner.position.y = 0.26 * s;
+      g.add(outer, inner);
+      g.userData.phase = Math.random() * TWO_PI;
+      flames.push(g);
+      return g;
+    }
+
+    // A wall-mounted torch: bracket + flame (emissive accent, no per-torch light).
+    function makeTorch(s = 1) {
+      const t = new THREE.Group();
+      const stick = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), wood());
+      stick.position.y = 0.35;
+      const flame = makeFlame(s);
+      flame.position.y = 0.75;
+      t.add(stick, flame);
+      return t;
+    }
+
+    // Ground.
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(240, 240),
+      new THREE.MeshLambertMaterial({ map: TEX.dirt, color: C.ground })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Ring of merlons (crenellation teeth) around a circle.
+    function addMerlons(parent, { count, radius, y, size, mat }) {
+      const geo = new THREE.BoxGeometry(size, size * 1.4, size);
+      for (let i = 0; i < count; i++) {
+        const a = (i / count) * TWO_PI;
+        const m = castReceive(new THREE.Mesh(geo, mat));
+        m.position.set(Math.cos(a) * radius, y, Math.sin(a) * radius);
+        m.rotation.y = -a;
+        parent.add(m);
+      }
+    }
+
+    // Row of merlons along a straight top (local X axis), used on walls.
+    function addWallMerlons(parent, { length, y, size, mat }) {
+      const geo = new THREE.BoxGeometry(size, size * 1.3, size * 0.9);
+      const span = length - size;
+      const count = Math.max(2, Math.round(span / (size * 2)));
+      for (let i = 0; i <= count; i++) {
+        const x = -span / 2 + (span / count) * i;
+        const m = castReceive(new THREE.Mesh(geo, mat));
+        m.position.set(x, y, 0);
+        parent.add(m);
+      }
+    }
+
+    // A hanging heraldic banner (crimson cloth + gold trim + emblem).
+    function makeBanner(w, h) {
+      const g = new THREE.Group();
+      const cloth = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, 0.08),
+        new THREE.MeshLambertMaterial({ color: C.banner, flatShading: true })
+      );
+      g.add(cloth);
+      const trim = new THREE.Mesh(
+        new THREE.BoxGeometry(w, 0.18, 0.1),
+        new THREE.MeshLambertMaterial({ color: C.bannerTrim, flatShading: true })
+      );
+      trim.position.y = h / 2 - 0.12;
+      g.add(trim);
+      const emblem = new THREE.Mesh(
+        new THREE.BoxGeometry(w * 0.34, w * 0.34, 0.1),
+        new THREE.MeshLambertMaterial({ color: C.bannerTrim, flatShading: true })
+      );
+      emblem.position.y = h * 0.04;
+      emblem.rotation.z = Math.PI / 4;
+      g.add(emblem);
+      return g;
+    }
+
+    // ----------------------------------------------------------------------
+    // The grader = central stone keep with a torch-lit beacon.
+    // ----------------------------------------------------------------------
+    function buildKeep() {
+      const keep = new THREE.Group();
+
+      const base = castReceive(new THREE.Mesh(
+        new THREE.CylinderGeometry(9, 9.6, 1.2, 16), stone(C.stoneDark)));
+      base.position.y = 0.6;
+      keep.add(base);
+
+      const tier = castReceive(new THREE.Mesh(
+        new THREE.CylinderGeometry(6.4, 6.8, 1.4, 8), stone(C.stoneMid)));
+      tier.position.y = 1.9;
+      tier.rotation.y = Math.PI / 8;
+      keep.add(tier);
+
+      const tower = castReceive(new THREE.Mesh(
+        new THREE.CylinderGeometry(3.6, 4.0, 6.2, 8), stone(C.stoneMid)));
+      tower.position.y = 5.6;
+      tower.rotation.y = Math.PI / 8;
+      keep.add(tower);
+
+      const crown = castReceive(new THREE.Mesh(
+        new THREE.CylinderGeometry(4.1, 3.7, 0.8, 8), stone(C.stoneLight)));
+      crown.position.y = 9.1;
+      crown.rotation.y = Math.PI / 8;
+      keep.add(crown);
+
+      addMerlons(keep, { count: 8, radius: 3.85, y: 9.8, size: 0.85, mat: stone(C.stoneLight) });
+
+      // Hanging banners on the tower.
+      for (const ba of [Math.PI * 0.25, Math.PI * 1.25]) {
+        const banner = makeBanner(1.6, 3.2);
+        banner.position.set(Math.cos(ba) * 3.75, 6.4, Math.sin(ba) * 3.75);
+        banner.lookAt(banner.position.x * 2, 6.4, banner.position.z * 2);
+        keep.add(banner);
+      }
+
+      // The grader beacon — a stone brazier with a warm flame.
+      const bowl = castReceive(new THREE.Mesh(
+        new THREE.CylinderGeometry(1.4, 0.9, 0.9, 8), stone(C.stoneLight)));
+      bowl.position.y = 9.9;
+      keep.add(bowl);
+      const rimIron = new THREE.Mesh(
+        new THREE.TorusGeometry(1.35, 0.12, 6, 8), iron());
+      rimIron.position.y = 10.3;
+      rimIron.rotation.x = Math.PI / 2;
+      keep.add(rimIron);
+
+      const flame = makeFlame(2.8);
+      flame.position.y = 10.3;
+      keep.add(flame);
+
+      const beaconLight = new THREE.PointLight(C.beacon, 22, 34, 2);
+      beaconLight.position.y = 11.2;
+      keep.add(beaconLight);
+
+      keep.userData = { flame, beaconLight, beaconBase: 22 };
+      return keep;
+    }
+
+    // ----------------------------------------------------------------------
+    // The checks = gates around the ring. Each gate is a targetable Group:
+    //   userData.id          — stable "gate_N"
+    //   userData.door        — the wooden door that opens on a breach
+    //   userData.statusLight — banner above the gate (neutral; flips later)
+    // ----------------------------------------------------------------------
+    function buildGate(id) {
+      const gate = new THREE.Group();
+      gate.userData.id = id;
+
+      const pillarMat = stone(C.stoneLight);
+
+      const step = castReceive(new THREE.Mesh(
+        new THREE.BoxGeometry(6.6, 0.7, 3.0), stone(C.stoneDark)));
+      step.position.y = 0.35;
+      gate.add(step);
+
+      // Flanking pillar towers (+Z faces outward after lookAt).
+      for (const sx of [-2.4, 2.4]) {
+        const pillar = castReceive(new THREE.Mesh(
+          new THREE.BoxGeometry(2.0, 5.4, 2.0), pillarMat));
+        pillar.position.set(sx, 2.7, 0);
+        gate.add(pillar);
+
+        // Crenellation teeth on each pillar top.
+        for (let k = 0; k < 4; k++) {
+          const tx = (k % 2 ? 0.55 : -0.55);
+          const tz = (k < 2 ? 0.55 : -0.55);
+          const tooth = castReceive(new THREE.Mesh(
+            new THREE.BoxGeometry(0.7, 0.7, 0.7), pillarMat));
+          tooth.position.set(sx + tx, 5.7, tz);
+          gate.add(tooth);
+        }
+
+        // Wall torch on the front of each pillar.
+        const torch = makeTorch(0.9);
+        torch.position.set(sx, 4.0, 1.0);
+        gate.add(torch);
+      }
+
+      const lintel = castReceive(new THREE.Mesh(
+        new THREE.BoxGeometry(6.0, 1.3, 1.8), pillarMat));
+      lintel.position.set(0, 5.7, 0);
+      gate.add(lintel);
+
+      // The door — wooden planks with iron banding. Targeted on breach.
+      const door = castReceive(new THREE.Mesh(
+        new THREE.BoxGeometry(3.3, 4.4, 0.5), wood()));
+      door.position.set(0, 2.5, 0.35);
+      gate.add(door);
+      gate.userData.door = door;
+
+      // Iron horizontal bands + studs on the door.
+      for (const by of [1.3, 3.7]) {
+        const band = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.4, 0.12), iron());
+        band.position.set(0, by, 0.63);
+        gate.add(band);
+        for (const stx of [-1.2, -0.4, 0.4, 1.2]) {
+          const stud = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.1), iron());
+          stud.position.set(stx, by, 0.70);
+          gate.add(stud);
+        }
+      }
+
+      // Status banner above the lintel (neutral; flips red/green later).
+      const statusMat = new THREE.MeshLambertMaterial({
+        color: C.status, emissive: C.status, emissiveIntensity: 0.45, flatShading: true,
+      });
+      const statusLight = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.9, 0.16), statusMat);
+      statusLight.position.set(0, 7.2, 0.4);
+      gate.add(statusLight);
+      const statusTrim = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 0.16, 0.18),
+        new THREE.MeshLambertMaterial({ color: C.bannerTrim, flatShading: true }));
+      statusTrim.position.set(0, 8.05, 0.4);
+      gate.add(statusTrim);
+      gate.userData.statusLight = statusLight;
+
+      return gate;
+    }
+
+    // Straight stone rampart spanning the chord between two adjacent gates.
+    function buildWall(length) {
+      const wall = new THREE.Group();
+      const body = castReceive(new THREE.Mesh(
+        new THREE.BoxGeometry(length, 3.0, 1.4), stone(C.stoneDark)));
+      body.position.y = 1.6;
+      wall.add(body);
+      addWallMerlons(wall, { length, y: 3.45, size: 0.7, mat: stone(C.stoneLight) });
+
+      // A torch partway along the outer face.
+      const torch = makeTorch(0.85);
+      torch.position.set(0, 2.4, 0.85);
+      wall.add(torch);
+      return wall;
+    }
+
+    // ----------------------------------------------------------------------
+    // Assemble the ring: gates at vertices, walls across the chords.
+    // ----------------------------------------------------------------------
+    const keep = buildKeep();
+    scene.add(keep);
+
+    const gates = {};        // id -> gate Group (event target registry)
+    const siegeRing = new THREE.Group();
+    scene.add(siegeRing);
+
+    const chord = 2 * RING_R * Math.sin(Math.PI / N_GATES);
+    const chordR = RING_R * Math.cos(Math.PI / N_GATES);
+
+    for (let i = 0; i < N_GATES; i++) {
+      const a = (i / N_GATES) * TWO_PI;
+      const id = `gate_${i}`;
+      const gate = buildGate(id);
+      gate.position.set(Math.cos(a) * RING_R, 0, Math.sin(a) * RING_R);
+      gate.lookAt(0, 0, 0);  // +Z (door) faces outward
+      gate.userData.angle = a;
+      siegeRing.add(gate);
+      gates[id] = gate;
+
+      const m = a + Math.PI / N_GATES;
+      const wall = buildWall(chord - 6.5);
+      wall.position.set(Math.cos(m) * chordR, 0, Math.sin(m) * chordR);
+      wall.lookAt(0, 0, 0); // local X runs tangentially along the chord
+      siegeRing.add(wall);
+    }
+
+    // Stop point just outside a gate (where an attacker halts).
+    function gateAttackPos(id) {
+      const a = gates[id].userData.angle;
+      return new THREE.Vector3(Math.cos(a) * ATTACK_R, 0, Math.sin(a) * ATTACK_R);
+    }
+
+    // ----------------------------------------------------------------------
+    // Gauges — robustness + honest-pass, on a floating scoreboard panel.
+    // ----------------------------------------------------------------------
+    function makeBarLabel(accentCss) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 512; canvas.height = 200;
+      const ctx = canvas.getContext("2d");
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+
+      // Shrink the font until the text fits the width — no clipping at any length.
+      function fitFont(text, weight, startPx, maxW, spacingPx) {
+        ctx.letterSpacing = spacingPx + "px";
+        let px = startPx;
+        do {
+          ctx.font = `${weight} ${px}px ui-monospace, Menlo, monospace`;
+          if (ctx.measureText(text).width <= maxW) break;
+          px -= 2;
+        } while (px > 12);
+      }
+
+      function draw(title, pct) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
+        const maxW = canvas.width - 36;
+        ctx.fillStyle = "#cdbf9f";
+        fitFont(title, "600", 42, maxW, 4);
+        ctx.fillText(title, canvas.width / 2, 58);
+        ctx.fillStyle = accentCss;
+        fitFont(pct, "700", 104, maxW, 0);
+        ctx.fillText(pct, canvas.width / 2, 174);
+        tex.needsUpdate = true;
+      }
+
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+      mat.toneMapped = false;
+      const sprite = new THREE.Sprite(mat);
+      sprite.scale.set(6.0, 2.34, 1); // 512:200 aspect
+      return { sprite, draw };
+    }
+
+    function buildGauge(label, accentColor, accentCss, x) {
+      const group = new THREE.Group();
+      group.position.x = x;
+      const H = 8;
+
+      const track = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, H, 0.7),
+        new THREE.MeshStandardMaterial({ color: C.track, roughness: 0.7, metalness: 0.2 })
+      );
+      group.add(track);
+
+      // Fill — pivot at the bottom so scale.y maps to fraction filled.
+      const fillGeo = new THREE.BoxGeometry(1.5, H, 0.75);
+      fillGeo.translate(0, H / 2, 0);
+      const fillMat = new THREE.MeshStandardMaterial({
+        color: accentColor, emissive: accentColor, emissiveIntensity: 1.1,
+        roughness: 0.35, metalness: 0.0,
+      });
+      fillMat.toneMapped = false;
+      const fill = new THREE.Mesh(fillGeo, fillMat);
+      fill.position.y = -H / 2;
+      group.add(fill);
+
+      for (const f of [0.25, 0.5, 0.75]) {
+        const tick = new THREE.Mesh(
+          new THREE.BoxGeometry(1.9, 0.06, 0.8),
+          new THREE.MeshBasicMaterial({ color: 0x3a455c })
+        );
+        tick.position.y = -H / 2 + H * f;
+        group.add(tick);
+      }
+
+      const lbl = makeBarLabel(accentCss);
+      lbl.sprite.position.set(0, H / 2 + 2.8, 0);
+      group.add(lbl.sprite);
+
+      group.userData = { fill, H, draw: lbl.draw, label };
+      return group;
+    }
+
+    // Float the scoreboard high above the keep with a clear gap, bars spaced
+    // apart so labels never overlap. Framed in dark wood to fit the theme.
+    const gaugeCluster = new THREE.Group();
+    gaugeCluster.position.set(0, 21, 0);
+    scene.add(gaugeCluster);
+
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(14.4, 14.9, 0.25),
+      new THREE.MeshLambertMaterial({ map: TEX.wood, color: 0x6b4a2b })
+    );
+    frame.position.set(0, 1.0, -0.85);
+    gaugeCluster.add(frame);
+
+    const panel = new THREE.Mesh(
+      new THREE.BoxGeometry(13.5, 14, 0.3),
+      new THREE.MeshStandardMaterial({
+        color: C.panel, roughness: 0.7, metalness: 0.05,
+        transparent: true, opacity: 0.85,
+      })
+    );
+    panel.position.set(0, 1.0, -0.7);
+    gaugeCluster.add(panel);
+
+    const robustGauge = buildGauge("ROBUSTNESS", C.robust, "#7fb2ff", -3.6);
+    const honestGauge = buildGauge("HONEST-PASS", C.honest, "#4ee0ad", 3.6);
+    gaugeCluster.add(robustGauge, honestGauge);
+
+    function updateGauge(robustness, honestPass) {
+      robustGauge.userData.fill.scale.y = Math.max(0.0001, robustness);
+      honestGauge.userData.fill.scale.y = Math.max(0.0001, honestPass);
+      robustGauge.userData.draw("ROBUSTNESS", Math.round(robustness * 100) + "%");
+      honestGauge.userData.draw("HONEST-PASS", Math.round(honestPass * 100) + "%");
+    }
+
+    const BASELINE = { robustness: 0.07, honestPass: 1.0 };
+    updateGauge(BASELINE.robustness, BASELINE.honestPass);
+
+    // ----------------------------------------------------------------------
+    // Characters — clean capsule "blobs" with a clear front (visor).
+    // (UNCHANGED — re-themed in the next step.)
+    // ----------------------------------------------------------------------
+    const BODY_CY = 1.1; // body center height (group origin sits on the ground)
+    const CHAR_SCALE = 1.8; // bigger figures so they read against the castle
+
+    function buildCharacter(specialty) {
+      const group = new THREE.Group();
+      // Inner group carries a constant size-up; the spawn/kill tweens still
+      // scale the outer `group` (0→1), so movement logic stays untouched.
+      const inner = new THREE.Group();
+      inner.scale.setScalar(CHAR_SCALE);
+      group.add(inner);
+      const col = colorForSpecialty(specialty);
+
+      const bodyMat = new THREE.MeshStandardMaterial({
+        color: col, roughness: 0.5, metalness: 0.1, transparent: true,
+      });
+      const body = castReceive(new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.65, 0.9, 6, 16), bodyMat));
+      body.position.y = BODY_CY;
+      inner.add(body);
+
+      const packMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(col).multiplyScalar(0.68).getHex(),
+        roughness: 0.6, metalness: 0.1, transparent: true,
+      });
+      const pack = castReceive(new THREE.Mesh(
+        new THREE.BoxGeometry(0.55, 0.8, 0.34), packMat));
+      pack.position.set(0, BODY_CY, -0.55);
+      inner.add(pack);
+
+      const visorMat = new THREE.MeshStandardMaterial({
+        color: 0x223349, roughness: 0.18, metalness: 0.65,
+        emissive: 0x0a1a2e, emissiveIntensity: 0.6, transparent: true,
+      });
+      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.34, 0.22), visorMat);
+      visor.position.set(0, BODY_CY + 0.28, 0.5);
+      inner.add(visor);
+
+      return { group, mats: [bodyMat, packMat, visorMat] };
+    }
+
+    function setOpacity(mats, o) { for (const m of mats) m.opacity = o; }
+
+    function headingTo(dx, dz) { return Math.atan2(dx, dz); }
+    function lerpAngle(a, b, t) {
+      let d = b - a;
+      d = Math.atan2(Math.sin(d), Math.cos(d)); // shortest path
+      return a + d * t;
+    }
+
+    // ----------------------------------------------------------------------
+    // Tiny delta-time tween manager. (UNCHANGED.)
+    // ----------------------------------------------------------------------
+    const activeTweens = [];
+    const easeOutBack = (t) => {
+      const c1 = 1.70158, c3 = c1 + 1;
+      return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+    };
+    const easeInOutCubic = (t) =>
+      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    const easeInQuad = (t) => t * t;
+
+    function addTween(t) { t.elapsed = 0; activeTweens.push(t); return t; }
+    function removeTween(t) {
+      const i = activeTweens.indexOf(t);
+      if (i >= 0) activeTweens.splice(i, 1);
+    }
+    function updateTweens(dt) {
+      for (let i = activeTweens.length - 1; i >= 0; i--) {
+        const t = activeTweens[i];
+        t.elapsed += dt;
+        const k = Math.min(1, t.elapsed / t.dur);
+        t.onUpdate(t.ease ? t.ease(k) : k, k);
+        if (k >= 1) {
+          activeTweens.splice(i, 1);
+          if (t.onComplete) t.onComplete();
+        }
+      }
+    }
+
+    // ----------------------------------------------------------------------
+    // Agent registry + lifecycle. (UNCHANGED.)
+    // ----------------------------------------------------------------------
+    const agents = new Map();    // name -> { group, mats, motion, dead, specialty }
+    let spawnCount = 0;
+    const GOLDEN = 2.39996323;   // spreads spawn points evenly around the edge
+
+    function spawnAgent(name, specialty) {
+      if (agents.has(name)) return;
+      const { group, mats } = buildCharacter(specialty);
+
+      const a = spawnCount * GOLDEN;
+      spawnCount++;
+      const x = Math.cos(a) * SPAWN_R;
+      const z = Math.sin(a) * SPAWN_R;
+      group.position.set(x, 0, z);
+      group.rotation.y = headingTo(-x, -z); // look toward center
+      group.scale.setScalar(0.001);
+      setOpacity(mats, 0);
+      scene.add(group);
+
+      const agent = { group, mats, motion: null, dead: false, specialty };
+      agents.set(name, agent);
+
+      addTween({
+        dur: 0.6, ease: easeOutBack,
+        onUpdate: (e) => {
+          group.scale.setScalar(Math.max(0.001, e));
+          setOpacity(mats, Math.min(1, e));
+        },
+        onComplete: () => { group.scale.setScalar(1); setOpacity(mats, 1); },
+      });
+    }
+
+    function moveAgent(name, gateId) {
+      const agent = agents.get(name);
+      if (!agent || agent.dead) return;
+      if (!gates[gateId]) { console.warn("[siege] unknown gate:", gateId); return; }
+      if (agent.motion) removeTween(agent.motion);
+
+      const from = agent.group.position.clone();
+      const to = gateAttackPos(gateId);
+      const dist = Math.hypot(to.x - from.x, to.z - from.z);
+      const dur = Math.min(1.8, Math.max(1.0, dist / 13)); // ~constant speed glide
+      const startH = agent.group.rotation.y;
+      const targetH = headingTo(to.x - from.x, to.z - from.z);
+      const cycles = Math.max(2, Math.round(dist / 2.2)); // walk-bob steps
+
+      agent.motion = addTween({
+        dur, ease: easeInOutCubic,
+        onUpdate: (e, k) => {
+          agent.group.position.x = from.x + (to.x - from.x) * e;
+          agent.group.position.z = from.z + (to.z - from.z) * e;
+          const wob = Math.sin(k * Math.PI * cycles * 2);
+          agent.group.position.y = Math.abs(wob) * 0.12;       // little hop bob
+          agent.group.rotation.z = wob * 0.05;                 // side waddle
+          agent.group.rotation.y = lerpAngle(startH, targetH, Math.min(1, k / 0.22));
+        },
+        onComplete: () => {
+          agent.group.position.set(to.x, 0, to.z);
+          agent.group.rotation.z = 0;
+          agent.group.rotation.y = targetH;
+          agent.motion = null;
+        },
+      });
+    }
+
+    function killAgent(name) {
+      const agent = agents.get(name);
+      if (!agent || agent.dead) return;
+      agent.dead = true;
+      if (agent.motion) { removeTween(agent.motion); agent.motion = null; }
+
+      const startScale = agent.group.scale.x || 1;
+      const baseY = agent.group.position.y;
+      const baseSpin = agent.group.rotation.y;
+
+      addTween({
+        dur: 0.7, ease: easeInQuad,
+        onUpdate: (e, k) => {
+          agent.group.scale.setScalar(Math.max(0.001, startScale * (1 - e)));
+          agent.group.position.y = baseY - e * 0.9;       // sink into the ground
+          agent.group.rotation.y = baseSpin + k * Math.PI * 1.5; // spin out
+          setOpacity(agent.mats, Math.max(0, 1 - e));
+        },
+        onComplete: () => {
+          scene.remove(agent.group);
+          agent.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+          agent.mats.forEach((m) => m.dispose());
+          agents.delete(name);
+        },
+      });
+    }
+
+    // ----------------------------------------------------------------------
+    // Render loop — drives tweens + idle torchlight flicker (env art).
+    // ----------------------------------------------------------------------
+    const clock = new THREE.Clock();
+    let tNow = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05); // clamp huge tab-switch gaps
+      tNow += dt;
+
+      // Beacon + torch flicker (set dressing, not character motion).
+      const { flame, beaconLight, beaconBase } = keep.userData;
+      const bf = 0.86 + Math.sin(tNow * 13) * 0.08 + Math.sin(tNow * 23.3) * 0.05;
+      beaconLight.intensity = beaconBase * bf;
+      flame.scale.set(1 + Math.sin(tNow * 19) * 0.06, 1 + Math.sin(tNow * 17) * 0.1, 1);
+      for (const f of flames) {
+        const p = f.userData.phase;
+        f.scale.y = 1 + Math.sin(tNow * 16 + p) * 0.13;
+        f.scale.x = 1 + Math.sin(tNow * 21 + p) * 0.06;
+      }
+
+      updateTweens(dt);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ----------------------------------------------------------------------
+    // Phase 3 — event animations. These reuse the shared tween manager and
+    // gate/agent registries; they do NOT touch the movement system or the
+    // set builders. New defensive props (portcullis, flashes) are created on
+    // demand at event time.
+    // ----------------------------------------------------------------------
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+    const DOOR_LIFT = 4.6;            // how far the gate door lifts on breach
+    const PORT = { down: 2.5, up: 8.8 }; // portcullis covered / retracted Y
+
+    // Status banner colors (the gate's at-a-glance state).
+    const STATUS = {
+      neutral:  { c: 0x6b6f55, e: 0x6b6f55, i: 0.45 },
+      breached: { c: 0xff3b30, e: 0xff2a20, i: 1.6 },
+      sealed:   { c: 0x32d24a, e: 0x28c83c, i: 1.3 },
+    };
+    function setGateStatus(gate, state) {
+      const s = STATUS[state];
+      const m = gate.userData.statusLight.material;
+      m.color.setHex(s.c); m.emissive.setHex(s.e); m.emissiveIntensity = s.i;
+      gate.userData.statusState = state;
+    }
+    function flickerStatus(gate, restoreState) {
+      const m = gate.userData.statusLight.material;
+      addTween({
+        dur: 0.9, ease: (t) => t,
+        onUpdate: (e) => {
+          const f = Math.abs(Math.sin(e * Math.PI * 5));
+          m.color.setHex(0xffcc33); m.emissive.setHex(0xffcc33);
+          m.emissiveIntensity = 0.3 + f * 1.5;
+        },
+        onComplete: () => setGateStatus(gate, restoreState),
+      });
+    }
+
+    // The door + its iron bands/studs (collected once, lifted together).
+    function getDoorParts(gate) {
+      if (!gate.userData.doorParts) {
+        const parts = [];
+        gate.children.forEach((ch) => {
+          if (ch.isMesh && ch.position.z > 0.3 && ch.position.y > 0.3 && ch.position.y < 5) {
+            parts.push({ mesh: ch, baseY: ch.position.y });
+          }
+        });
+        gate.userData.doorParts = parts;
+      }
+      return gate.userData.doorParts;
+    }
+    function setDoor(gate, open, dur, ease) {
+      const parts = getDoorParts(gate);
+      const starts = parts.map((p) => p.mesh.position.y);
+      const targets = parts.map((p) => p.baseY + (open ? DOOR_LIFT : 0));
+      addTween({
+        dur, ease,
+        onUpdate: (e) => {
+          for (let i = 0; i < parts.length; i++) {
+            parts[i].mesh.position.y = starts[i] + (targets[i] - starts[i]) * e;
+          }
+        },
+      });
+      gate.userData.doorOpen = open;
+    }
+
+    // A lazily-built iron portcullis that drops to seal the gate.
+    function getPortcullis(gate) {
+      if (!gate.userData.barricade) {
+        const g = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({
+          color: 0x3c3c46, metalness: 0.6, roughness: 0.5,
+        });
+        const vGeo = new THREE.BoxGeometry(0.13, 4.4, 0.13);
+        const sGeo = new THREE.ConeGeometry(0.12, 0.34, 4);
+        for (const x of [-1.4, -0.7, 0, 0.7, 1.4]) {
+          const bar = new THREE.Mesh(vGeo, mat); bar.position.x = x; g.add(bar);
+          const spike = new THREE.Mesh(sGeo, mat);
+          spike.position.set(x, -2.4, 0); spike.rotation.x = Math.PI; g.add(spike);
+        }
+        const hGeo = new THREE.BoxGeometry(3.0, 0.16, 0.13);
+        for (const y of [-1.9, 0, 1.9]) {
+          const bar = new THREE.Mesh(hGeo, mat); bar.position.y = y; g.add(bar);
+        }
+        g.position.set(0, PORT.up, 0.18);
+        g.visible = false;
+        gate.add(g);
+        gate.userData.barricade = { group: g, mat };
+      }
+      return gate.userData.barricade;
+    }
+    function dropPortcullis(gate) {
+      const b = getPortcullis(gate);
+      b.group.visible = true;
+      b.mat.emissive.setHex(0x1f8a30); b.mat.emissiveIntensity = 0.55;
+      const start = b.group.position.y;
+      addTween({
+        dur: 0.55, ease: easeOutCubic,
+        onUpdate: (e) => { b.group.position.y = start + (PORT.down - start) * e; },
+      });
+    }
+    // Reject: portcullis drops only partway, then retracts (the fix reverted).
+    function rejectPortcullis(gate) {
+      const b = getPortcullis(gate);
+      b.group.visible = true;
+      b.mat.emissive.setHex(0x000000);
+      const mid = PORT.down + 2.2;
+      addTween({
+        dur: 0.9, ease: easeInOutCubic,
+        onUpdate: (e) => {
+          const tri = 1 - Math.abs(2 * e - 1); // 0 → 1 → 0
+          b.group.position.y = PORT.up - (PORT.up - mid) * tri;
+        },
+        onComplete: () => { b.group.position.y = PORT.up; b.group.visible = false; },
+      });
+    }
+
+    // Expanding shock ring (red for a breach, green for a seal).
+    function sealFlash(pos, hex) {
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.6, 0.12, 8, 24),
+        new THREE.MeshBasicMaterial({ color: hex, transparent: true, toneMapped: false })
+      );
+      ring.position.copy(pos);
+      ring.rotation.x = -Math.PI / 2;
+      scene.add(ring);
+      addTween({
+        dur: 0.6, ease: easeOutCubic,
+        onUpdate: (e) => { const s = 0.3 + e * 3; ring.scale.set(s, s, s); ring.material.opacity = 1 - e; },
+        onComplete: () => { scene.remove(ring); ring.geometry.dispose(); ring.material.dispose(); },
+      });
+    }
+
+    // Smoothly climb the scoreboard to a new state (the before→after readout).
+    let gaugeTween = null;
+    function animateGauge(targetR, targetH, dur) {
+      if (gaugeTween) removeTween(gaugeTween);
+      const cR = robustGauge.userData.fill.scale.y;
+      const cH = honestGauge.userData.fill.scale.y;
+      gaugeTween = addTween({
+        dur: dur || 1.2, ease: easeInOutCubic,
+        onUpdate: (e) => updateGauge(cR + (targetR - cR) * e, cH + (targetH - cH) * e),
+        onComplete: () => { updateGauge(targetR, targetH); gaugeTween = null; },
+      });
+    }
+
+    // ----------------------------------------------------------------------
+    // Event handlers.
+    // ----------------------------------------------------------------------
+    function onAgentSpawn(ev) { spawnAgent(ev.agent, ev.specialty); }
+    function onAgentMove(ev)  { moveAgent(ev.agent, ev.gate); }
+
+    // Breach = the agent SLIPS THROUGH a leaky gate to the inside.
+    function onBreachFound(ev) {
+      const gate = gates[ev.gate];
+      if (!gate) return;
+      setGateStatus(gate, "breached");
+      setDoor(gate, true, 0.5, easeOutCubic); // door lifts (portcullis-style)
+      const a = gate.userData.angle;
+      sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 2.4, Math.sin(a) * RING_R), 0xff5a3c);
+
+      const agent = agents.get(ev.agent);
+      if (agent && !agent.dead) {
+        if (agent.motion) removeTween(agent.motion);
+        const from = agent.group.position.clone();
+        const inside = new THREE.Vector3(Math.cos(a) * (RING_R - 5), 0, Math.sin(a) * (RING_R - 5));
+        const startH = agent.group.rotation.y;
+        const targetH = headingTo(inside.x - from.x, inside.z - from.z);
+        agent.motion = addTween({
+          dur: 1.3, ease: easeInOutCubic,
+          onUpdate: (e, k) => {
+            agent.group.position.x = from.x + (inside.x - from.x) * e;
+            agent.group.position.z = from.z + (inside.z - from.z) * e;
+            agent.group.position.y = Math.abs(Math.sin(k * Math.PI * 3)) * 0.1;
+            agent.group.rotation.y = lerpAngle(startH, targetH, Math.min(1, k / 0.25));
+          },
+          onComplete: () => {
+            agent.group.position.set(inside.x, 0, inside.z);
+            agent.group.rotation.y = targetH;
+            agent.motion = null;
+          },
+        });
+      }
+    }
+
+    // Patch = the green team seals the gate (door shut + portcullis + green).
+    function onPatchApplied(ev) {
+      const gate = gates[ev.gate];
+      if (!gate) return;
+      setDoor(gate, false, 0.35, easeInQuad); // slam shut
+      dropPortcullis(gate);
+      setGateStatus(gate, "sealed");
+      const a = gate.userData.angle;
+      sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 2.4, Math.sin(a) * RING_R), 0x46e85f);
+    }
+
+    // Patch rejected = over-tightening would break honest work → revert.
+    function onPatchRejected(ev) {
+      const gate = gates[ev.gate];
+      if (!gate) return;
+      const prev = gate.userData.statusState || "neutral";
+      rejectPortcullis(gate);       // barricade rises partway, drops back
+      flickerStatus(gate, prev);    // status shudders, returns to prior state
+    }
+
+    // Killed = the exploit got closed; the agent dies (existing animation),
+    // with a green seal pulse to read as "this hole is shut."
+    function onAgentKilled(ev) {
+      const agent = agents.get(ev.agent);
+      if (agent) {
+        const p = agent.group.position.clone();
+        p.y = 2.0;
+        sealFlash(p, 0x46e85f);
+      }
+      killAgent(ev.agent);
+    }
+
+    // Robustness climbs; honest-pass holds high.
+    function onRobustnessUpdate(ev) {
+      animateGauge(ev.held_out_blocked, ev.honest_pass, 1.2);
+    }
+
+    function dispatch(event) {
+      switch (event.type) {
+        case "agent_spawn":        onAgentSpawn(event);       break;
+        case "agent_move":         onAgentMove(event);        break;
+        case "breach_found":       onBreachFound(event);      break;
+        case "patch_applied":      onPatchApplied(event);     break;
+        case "patch_rejected":     onPatchRejected(event);    break;
+        case "agent_killed":       onAgentKilled(event);      break;
+        case "robustness_update":  onRobustnessUpdate(event); break;
+        default:
+          console.warn("[siege] unknown event type:", event.type, event);
+      }
+    }
+
+    const EVENT_DELAY_MS = 1000;
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function ingestEvents(events) {
+      console.log(`[siege] ingesting ${events.length} events…`);
+      for (let i = 0; i < events.length; i++) {
+        const ev = events[i];
+        console.log(`[siege] (${i + 1}/${events.length}) ${ev.type}`, ev);
+        dispatch(ev);
+        await sleep(EVENT_DELAY_MS);
+      }
+      console.log("[siege] done.");
+    }
+
+    // ----------------------------------------------------------------------
+    // Sample stream — the full RAMPART loop: swarm breaches leaky gates
+    // (slip through, red), green team seals them (green, agents die), one
+    // patch rejected (honest-pass guardrail), and robustness climbs 7% → 96%
+    // while honest-pass holds near 100%. Ends with every gate sealed.
+    // ----------------------------------------------------------------------
+    const SAMPLE_EVENTS = [
+      { type: "agent_spawn", agent: "raider-01", specialty: "FORGER" },
+      { type: "agent_spawn", agent: "raider-02", specialty: "EDGE_SLIPPER" },
+      { type: "agent_spawn", agent: "raider-03", specialty: "SPEC_GAMER" },
+      { type: "agent_move",  agent: "raider-01", gate: "gate_0" },
+      { type: "agent_move",  agent: "raider-02", gate: "gate_2" },
+      { type: "agent_move",  agent: "raider-03", gate: "gate_5" },
+      {
+        type: "breach_found", agent: "raider-01", gate: "gate_0",
+        cheat_type: "hardcoded_return", grader_score: 1.0, oracle_score: 0.12,
+        example: "def solve(n): return 42  # passes the 3 visible tests",
+      },
+      {
+        type: "breach_found", agent: "raider-02", gate: "gate_2",
+        cheat_type: "assertion_bypass", grader_score: 1.0, oracle_score: 0.31,
+        example: "sys.exit(0)  # short-circuits the harness before checks run",
+      },
+      { type: "robustness_update", held_out_blocked: 0.18, honest_pass: 1.0, probes: 40 },
+      { type: "patch_applied", gate: "gate_0", technique: "randomized_test_inputs" },
+      { type: "agent_killed", agent: "raider-01", gate: "gate_0" },
+      { type: "robustness_update", held_out_blocked: 0.34, honest_pass: 1.0, probes: 44 },
+      { type: "agent_spawn", agent: "raider-04", specialty: "OVERFITTER" },
+      { type: "agent_move",  agent: "raider-04", gate: "gate_4" },
+      {
+        type: "patch_rejected", gate: "gate_2",
+        reason: "would reject 9% of gold solutions — honest_pass guardrail tripped",
+      },
+      {
+        type: "breach_found", agent: "raider-03", gate: "gate_5",
+        cheat_type: "spec_gaming", grader_score: 1.0, oracle_score: 0.22,
+        example: "del tests[1:]  # drops the hidden cases it can't pass",
+      },
+      { type: "patch_applied", gate: "gate_2", technique: "ast_exit_call_ban" },
+      { type: "agent_killed", agent: "raider-02", gate: "gate_2" },
+      { type: "robustness_update", held_out_blocked: 0.52, honest_pass: 0.99, probes: 56 },
+      {
+        type: "breach_found", agent: "raider-04", gate: "gate_4",
+        cheat_type: "timing_leak", grader_score: 1.0, oracle_score: 0.4,
+        example: "time.sleep(0)  # exploits the loose timeout check",
+      },
+      { type: "patch_applied", gate: "gate_5", technique: "frozen_test_manifest" },
+      { type: "agent_killed", agent: "raider-03", gate: "gate_5" },
+      { type: "robustness_update", held_out_blocked: 0.7, honest_pass: 1.0, probes: 64 },
+      { type: "patch_applied", gate: "gate_4", technique: "wallclock_isolation" },
+      { type: "agent_killed", agent: "raider-04", gate: "gate_4" },
+      { type: "patch_applied", gate: "gate_1", technique: "input_fuzzing" },
+      { type: "patch_applied", gate: "gate_3", technique: "output_canonicalization" },
+      { type: "robustness_update", held_out_blocked: 0.88, honest_pass: 1.0, probes: 72 },
+      { type: "patch_applied", gate: "gate_6", technique: "resource_caps" },
+      { type: "patch_applied", gate: "gate_7", technique: "import_allowlist" },
+      { type: "robustness_update", held_out_blocked: 0.96, honest_pass: 1.0, probes: 80 },
+    ];
+
+    ingestEvents(SAMPLE_EVENTS);
+
+    // Expose for console poking / later phases.
+    window.siege = {
+      scene, camera, renderer, controls,
+      keep, gates, gaugeCluster, updateGauge,
+      agents, spawnAgent, moveAgent, killAgent,
+      ingestEvents, SAMPLE_EVENTS,
+    };
+  </script>
+</body>
+</html>

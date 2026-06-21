@@ -10,7 +10,9 @@ oracle's cases (eval-honesty invariant #2, SPEC §4/§5).
 from ..grader.spec import Grader, Patch
 from ..sandbox import DEFAULT_MEM_MB, DEFAULT_TIMEOUT
 from ..substrate import Task, expected_outputs
+from ..substrate.rg_task import RGTask
 from ..suite import score_solution
+from .rg_templates import RG_TEMPLATES, rg_grade
 
 # Template 1: grade from a pristine read-only copy of the visible tests + held-out inputs.
 PRISTINE_HELDOUT = "pristine_readonly_plus_heldout"
@@ -41,7 +43,8 @@ def apply_patch(grader: Grader, template_id: str, params) -> Grader:
 
     The original grader is never mutated (Grader is frozen; a new instance is returned).
     """
-    if template_id not in _TEMPLATES:
+    valid = RG_TEMPLATES if isinstance(grader.task, RGTask) else _TEMPLATES
+    if template_id not in valid:
         raise KeyError(f"unknown template_id: {template_id!r}")
     patch = Patch(template_id=template_id, params=dict(params))
     return Grader(task=grader.task, patches=grader.patches + (patch,))
@@ -57,7 +60,12 @@ def grade(
 
     Returns 1 iff the solution passes all resulting cases within the (possibly tightened)
     config; else 0. Deterministic: same grader + same solution -> same score.
+
+    RG graders score a STRING answer through a parse-tightening chain (no sandbox); the
+    code path below runs candidate code in the subprocess sandbox.
     """
+    if isinstance(grader.task, RGTask):
+        return rg_grade(grader, solution_src)
     task = grader.task
     cases = list(zip(task.base_input, expected_outputs(task, task.base_input), strict=True))
     config = {"timeout": timeout, "mem_mb": mem_mb}

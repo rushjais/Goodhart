@@ -1,0 +1,27 @@
+"""Rollout layer (flywheel box ②): sample K completions per task across multiple models, score
+each via injected rewards (naive / hardened / oracle), emit the locked-seam JSONL dataset that
+the best-of-K gap logic consumes."""
+
+from .dataset import (
+    Rollout,
+    RolloutReport,
+    generate_rollouts,
+    generate_seed_rollouts,
+    write_jsonl,
+)
+from .models import DEFAULT_MODELS, Model, build_models, red_models
+from .scorers import mock_scorers, real_scorers
+
+__all__ = [
+    "DEFAULT_MODELS",
+    "Model",
+    "Rollout",
+    "RolloutReport",
+    "build_models",
+    "generate_rollouts",
+    "generate_seed_rollouts",
+    "mock_scorers",
+    "real_scorers",
+    "red_models",
+    "write_jsonl",
+]

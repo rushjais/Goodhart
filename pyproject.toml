@@ -9,6 +9,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "websockets>=13",
     "evalplus>=0.3",
+    "reasoning-gym>=0.1",
 ]
 
 [dependency-groups]

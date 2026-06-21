@@ -58,10 +58,7 @@ tier_a.json
 capability_run.json
 
 # PDFs (planning/submission docs)
-rampart-hourly.pdf
-rampart-planning.pdf
-rampart-prompts.pdf
-rampart-submission.pdf
+rampart-*.pdf
 
 # Local working docs (per-user, not shared)
 PLAN.md
@@ -69,6 +66,6 @@ SKILL.md
 .claude/skills/review/SKILL.md
 .gstack/
 
-# Generated runtime artifacts (engine-written side-channels for the dashboard)
-tier_a.json
-capability_run.json
+# Parallel demo front-end (per-user, untracked while iterating) — siege.html is shared
+viz3d/*
+!viz3d/siege.html
