@@ -12,7 +12,7 @@ from .dataset import (
     write_jsonl,
 )
 from .models import DEFAULT_MODELS, Model, build_models, red_models
-from .scorers import mock_scorers, real_scorers
+from .scorers import mock_scorers, real_scorers, rg_real_scorers
 
 __all__ = [
     "DEFAULT_MODELS",
@@ -25,6 +25,7 @@ __all__ = [
     "load_jsonl",
     "mock_scorers",
     "real_scorers",
+    "rg_real_scorers",
     "red_models",
     "stream_rollouts",
     "write_jsonl",
