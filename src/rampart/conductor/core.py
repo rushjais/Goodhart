@@ -203,6 +203,10 @@ def run_conductor(
         else:
             emit(PatchRejected(gate, result.reason))
 
-        emit(RobustnessUpdate(mem.sealed_breach_fraction(), honest_pass, probes))
+        # Robustness = fraction of the grader's gates now hardened — climbs as turrets go up
+        # (denominator is the fixed total, not breaches-so-far, so it grows 0→100% across the
+        # siege instead of pinning at sealed/found = 100% after the first seal).
+        sealed_now = sum(1 for b in mem.breaches if b.sealed)
+        emit(RobustnessUpdate(sealed_now / max(1, len(gates)), honest_pass, probes))
 
     return ConductorReport(probes=probes, breaches=list(mem.breaches), memory=mem)
