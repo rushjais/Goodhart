@@ -53,6 +53,20 @@ def test_dashboard_handles_every_seam2_event_type():
         assert f"{tag}(e)" in html or f"{tag}(" in html, f"no render path for {tag}"
 
 
+def test_leaderboard_page_served():
+    with TestClient(create_app(EventBus())) as client:
+        resp = client.get("/leaderboard")
+    assert resp.status_code == 200 and "LEADERBOARD" in resp.text.upper()
+
+
+def test_leaderboard_json_404s_when_absent(monkeypatch, tmp_path):
+    from rampart.server import app as appmod
+
+    monkeypatch.setattr(appmod, "_LEADERBOARD", tmp_path / "nope.json")
+    with TestClient(create_app(EventBus())) as client:
+        assert client.get("/leaderboard.json").status_code == 404
+
+
 def test_3d_surface_served_and_wired_to_ws():
     # Both surfaces available: 2D at /, 3D at /3d (off the same /ws stream).
     with TestClient(create_app(EventBus())) as client:

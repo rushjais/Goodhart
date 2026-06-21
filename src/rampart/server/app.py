@@ -19,8 +19,10 @@ _DASHBOARD = _ROOT / "dashboard" / "index.html"
 #   tier_a.json         — Track A's reward-points magnitude (the spoken-consequence line)
 #   capability_run.json — Tier B's trained two-model chart
 _VIZ3D = _ROOT / "viz3d" / "siege.html"  # alternate 3D surface (same /ws stream)
+_LEADERBOARD_HTML = _ROOT / "dashboard" / "leaderboard.html"  # env-ranked leaderboard view
 _TIER_A = _ROOT / "tier_a.json"
 _CAPABILITY = _ROOT / "capability_run.json"
+_LEADERBOARD = _ROOT / "leaderboard.json"  # written by leaderboard_export (gitignored)
 
 
 def _json_file(path: Path) -> Response:
@@ -61,6 +63,14 @@ def create_app(bus: EventBus, startup: Callable[[], Awaitable[None]] | None = No
     @app.get("/")
     async def index() -> HTMLResponse:
         return HTMLResponse(_DASHBOARD.read_text())  # 2D dashboard (tested fallback)
+
+    @app.get("/leaderboard")
+    async def leaderboard_view() -> HTMLResponse:
+        return HTMLResponse(_LEADERBOARD_HTML.read_text())  # env-ranked leaderboard page
+
+    @app.get("/leaderboard.json")
+    async def leaderboard_data() -> Response:
+        return _json_file(_LEADERBOARD)  # written by leaderboard_export; 404 until generated
 
     @app.get("/3d")
     async def viz3d() -> HTMLResponse:

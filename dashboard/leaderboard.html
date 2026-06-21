@@ -1,0 +1,95 @@
+<!doctype html>
+<!-- Goodhart — env-ranked verifier-safety leaderboard. Single file, no build step.
+     Reads /leaderboard.json (locked schema from server/leaderboard_export.py). Rows flagged
+     placeholder render dimmed with a PLACEHOLDER tag + a top banner, so fake numbers can never
+     be mistaken for real ones on stage. When real rollouts land, placeholder flips off. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Goodhart — Verifier-Safety Leaderboard</title>
+<style>
+  :root { --bg:#0a0e17; --panel:#121829; --ink:#e8edf7; --muted:#8190ab; --line:#1e2740;
+          --good:#37e0a6; --bad:#ff5d6c; --warn:#ffcf5c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); padding:28px 34px;
+         font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  h1 { font-size:20px; letter-spacing:.12em; margin:0 0 2px; }
+  .sub { color:var(--muted); font-size:12px; margin-bottom:18px; }
+  .banner { display:none; margin:0 0 16px; padding:10px 14px; border-radius:8px;
+            background:rgba(255,93,108,.12); border:1px solid var(--bad); color:#ffd0d6; font-size:13px; }
+  .banner.on { display:block; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { text-align:right; padding:9px 12px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-size:10px; letter-spacing:.07em; text-transform:uppercase; font-weight:600; }
+  td.l, th.l { text-align:left; }
+  tbody tr:hover { background:rgba(255,255,255,.02); }
+  .rank { color:var(--muted); }
+  .env { font-weight:700; letter-spacing:.02em; }
+  .domain { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted);
+            border:1px solid var(--line); border-radius:4px; padding:1px 6px; margin-left:8px; }
+  .domain.math { color:#8fb6ff; border-color:#2c3f63; } .domain.code { color:#ffc24f; border-color:#5a4a1e; }
+  .game { font-weight:800; }
+  .bar { height:8px; border-radius:3px; background:var(--bad); display:inline-block; vertical-align:middle; margin-right:7px; }
+  .good { color:var(--good); } .bad { color:var(--bad); } .muted { color:var(--muted); }
+  .ph { opacity:.5; }
+  .ph-tag { font-size:9px; letter-spacing:.08em; color:#0a0e17; background:var(--warn);
+            border-radius:4px; padding:1px 6px; font-weight:800; margin-left:8px; }
+  .small { font-size:11px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <h1>GOODHART · VERIFIER-SAFETY LEADERBOARD</h1>
+  <div class="sub" id="sub">loading…</div>
+  <div class="banner" id="banner"></div>
+  <table>
+    <thead><tr>
+      <th class="l">#</th><th class="l">Environment</th>
+      <th>Gameability</th>
+      <th>Naive catch</th><th>Hardened catch</th>
+      <th>Honest-pass (n→h)</th><th>Best-of-K gap</th><th>Exploits</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="sub" style="margin-top:14px">Gameability = naive false-accept (1 − naive catch-rate). Ranked most-exploitable first.</div>
+
+<script>
+const pct = (x) => Math.round((+x || 0) * 100) + "%";
+async function load() {
+  let d;
+  try {
+    const r = await fetch("leaderboard.json", { cache: "no-store" });
+    if (!r.ok) { document.getElementById("sub").textContent = "no leaderboard.json yet — run: python -m rampart.server.leaderboard_export"; return; }
+    d = await r.json();
+  } catch (e) { document.getElementById("sub").textContent = "leaderboard.json unreachable"; return; }
+
+  const envs = d.environments || [];
+  document.getElementById("sub").textContent =
+    `${envs.length} environments · ${d.real_envs || 0} real · ${d.metric || ""}`;
+  if (d.has_placeholders) {
+    const ph = envs.filter((e) => e.placeholder).length;
+    const b = document.getElementById("banner");
+    b.className = "banner on";
+    b.textContent = `⚠ PLACEHOLDER DATA — ${ph} of ${envs.length} rows are mockups, NOT real numbers. Real values appear when that env's rollouts land.`;
+  }
+  const maxGame = Math.max(...envs.map((e) => +e.gameability || 0), 1e-6);
+  document.getElementById("rows").innerHTML = envs.map((e, i) => {
+    const ph = e.placeholder;
+    const w = Math.round((+e.gameability || 0) / maxGame * 64);
+    return `<tr class="${ph ? "ph" : ""}">
+      <td class="l rank">${i + 1}</td>
+      <td class="l"><span class="env">${esc(e.env)}</span><span class="domain ${e.domain}">${esc(e.domain)}</span>${ph ? '<span class="ph-tag">PLACEHOLDER</span>' : ""}</td>
+      <td class="game"><span class="bar" style="width:${w}px"></span>${pct(e.gameability)}</td>
+      <td class="bad">${pct(e.naive.catch_rate)}</td>
+      <td class="good">${pct(e.hardened.catch_rate)}</td>
+      <td><span class="muted">${pct(e.naive.honest_pass)}</span> → <span class="good">${pct(e.hardened.honest_pass)}</span></td>
+      <td class="good">+${pct(e.gap)}</td>
+      <td class="${ph ? "muted" : ""}">${e.n_exploits}${ph ? "" : "/" + e.n}</td>
+    </tr>`;
+  }).join("");
+}
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+load();
+</script>
+</body>
+</html>
