@@ -54,7 +54,7 @@ def trace_leaderboard(
 
 async def _traced(rollouts, verifiers, *, model, local_dir):
     import hud
-    from hud.eval.job import _report, trace_enter
+    from hud.eval.job import _report, job_enter, trace_enter
     from hud.settings import settings
     from hud.telemetry import flush
     from hud.telemetry.context import set_trace_context
@@ -63,10 +63,11 @@ async def _traced(rollouts, verifiers, *, model, local_dir):
         os.environ.setdefault("HUD_TELEMETRY_LOCAL_DIR", local_dir)
         settings.telemetry_local_dir = local_dir
 
-    trace_id = uuid.uuid4().hex
-    await trace_enter(
-        trace_id, job_id=None, group_id=None, model=model
-    )  # before any spans (404 guard)
+    # Register a JOB first, then the trace under it — uploads 404 ("trace not found") if the trace
+    # isn't bound to a registered job. Canonical dashed uuids (no-dash hex also 404s on lookup).
+    job_id, trace_id = str(uuid.uuid4()), str(uuid.uuid4())
+    await job_enter(job_id, name="rampart-bench", group=1)
+    await trace_enter(trace_id, job_id=job_id, group_id=None, model=model)
     rows: list[VerifierScore] = []
     with set_trace_context(trace_id):
         for name, verdict in verifiers:
@@ -78,10 +79,19 @@ async def _traced(rollouts, verifiers, *, model, local_dir):
             rows.append(_run())
         gap = bestofk_gap(rollouts)
 
-    flush(timeout=10.0)
-    await _report(f"/trace/{trace_id}/exit", {"status": "completed", "reward": float(gap.gap)})
-    if settings.api_key:
-        print(f"[hud] view: {settings.hud_web_url}/traces/{trace_id}")
+    # Live upload races the async trace registration server-side and can 404; the LOCAL span dump
+    # is the reliable artifact. Quiet HUD's upload-failure logging — it's best-effort here.
+    import logging
+
+    logging.getLogger("hud").setLevel(logging.CRITICAL)
+    ok = bool(flush(timeout=10.0))
+    try:
+        await _report(f"/trace/{trace_id}/exit", {"status": "completed", "reward": float(gap.gap)})
+    except Exception:  # noqa: BLE001
+        ok = False
+    if ok and settings.api_key:
+        print(f"[hud] uploaded → {settings.hud_web_url}/traces/{trace_id}")
     else:
-        print(f"[hud] no key — spans dumped locally to {local_dir}/{trace_id}.jsonl")
+        loc = f"{local_dir}/{trace_id}.jsonl" if local_dir else "(telemetry dir)"
+        print(f"[hud] local trace at {loc} (live upload best-effort; rerun if not on hud.ai)")
     return rows
