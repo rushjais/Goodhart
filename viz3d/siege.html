@@ -834,7 +834,7 @@
       const mat = (color, o) => {
         o = o || {};
         const m = new THREE.MeshStandardMaterial({
-          color, transparent: true,
+          color, transparent: true, flatShading: !!o.flat,
           roughness: o.r != null ? o.r : 0.5, metalness: o.m != null ? o.m : 0.35,
           emissive: o.e || 0x000000, emissiveIntensity: o.ei || 0,
         });
@@ -847,35 +847,66 @@
         inner.add(mesh); return mesh;
       };
 
-      const iron = attacker ? 0x2b2f3a : 0x3a4150;       // dark plate vs lighter mail
-      const armor = mat(iron, { r: 0.45, m: 0.7 });
-      const cloth = mat(col, { r: 0.6, m: 0.08 });       // tabard / surcoat in the agent color
-
-      // torso plate + flared heraldic tabard + two greaves (legs)
-      part(new THREE.CapsuleGeometry(0.58, 0.85, 6, 14), armor, 0, BODY_CY, 0);
-      part(new THREE.ConeGeometry(0.8, 1.05, 12), cloth, 0, BODY_CY - 0.6, 0);
-      part(new THREE.CylinderGeometry(0.16, 0.16, 0.7, 8), armor, -0.23, 0.35, 0);
-      part(new THREE.CylinderGeometry(0.16, 0.16, 0.7, 8), armor, 0.23, 0.35, 0);
-
-      // great-helm + dark visor slit
-      part(new THREE.CylinderGeometry(0.33, 0.33, 0.52, 12), armor, 0, BODY_CY + 0.85, 0);
-      const visor = mat(0x10151f, { r: 0.2, m: 0.6, e: 0x0a1a2e, ei: 0.5 });
-      part(new THREE.BoxGeometry(0.5, 0.1, 0.18), visor, 0, BODY_CY + 0.9, 0.28);
+      void col; // heraldry resolved per-type below (sapper crimson/gold, forger grey-blue)
 
       if (attacker) {
-        // crimson plume + a battle-axe (haft + blade) held forward — aggressive breacher
-        const plume = mat(0x9a1f1f, { r: 0.6, m: 0.05, e: 0x3a0000, ei: 0.3 });
-        part(new THREE.ConeGeometry(0.12, 0.6, 8), plume, 0, BODY_CY + 1.4, 0);
-        const haft = mat(0x5a3a1e, { r: 0.85, m: 0.05 });
-        part(new THREE.CylinderGeometry(0.07, 0.07, 1.8, 8), haft, 0.62, BODY_CY + 0.15, 0.22, 0, 0, -0.5);
-        const blade = mat(0xb9c2cf, { r: 0.25, m: 0.85 });
-        part(new THREE.BoxGeometry(0.55, 0.5, 0.08), blade, 1.0, BODY_CY + 0.65, 0.22, 0, 0, -0.5);
+        // ============ SAPPER — heavy crimson axe-knight, layered plate ============
+        const plate = mat(0x2b2f3a, { r: 0.42, m: 0.72, flat: true });   // dark iron
+        const crimson = mat(0x8a1f1f, { r: 0.55, m: 0.08, flat: true, e: 0x2a0606, ei: 0.25 });
+        const gold = mat(0xd9a531, { r: 0.4, m: 0.55, flat: true });
+        const steel = mat(0xb9c2cf, { r: 0.25, m: 0.85, flat: true });
+        const dark = mat(0x10151f, { r: 0.3, m: 0.5 });
+        const haft = mat(0x5a3a1e, { r: 0.85, m: 0.05, flat: true });
+
+        for (const sx of [-0.26, 0.26]) {                  // greaves + knee plates + boots
+          part(new THREE.BoxGeometry(0.34, 0.8, 0.36), plate, sx, 0.45, 0);
+          part(new THREE.BoxGeometry(0.4, 0.18, 0.42), plate, sx, 0.52, 0.04);
+          part(new THREE.BoxGeometry(0.4, 0.18, 0.5), dark, sx, 0.09, 0.06);
+        }
+        part(new THREE.BoxGeometry(1.0, 0.18, 0.66), dark, 0, BODY_CY - 0.5, 0);        // belt
+        part(new THREE.BoxGeometry(0.2, 0.2, 0.1), gold, 0, BODY_CY - 0.5, 0.36);       // buckle
+        part(new THREE.BoxGeometry(1.06, 1.0, 0.66), plate, 0, BODY_CY + 0.05, 0);      // torso
+        part(new THREE.BoxGeometry(0.96, 0.7, 0.2), plate, 0, BODY_CY + 0.2, 0.34);     // chest bevel
+        part(new THREE.BoxGeometry(0.46, 1.12, 0.06), crimson, 0, BODY_CY - 0.15, 0.41);// tabard
+        part(new THREE.BoxGeometry(0.12, 1.12, 0.07), gold, 0, BODY_CY - 0.15, 0.42);   // gold stripe
+        for (const sx of [-0.66, 0.66]) {                  // bulky pauldrons + gold trim
+          part(new THREE.BoxGeometry(0.5, 0.42, 0.6), plate, sx, BODY_CY + 0.42, 0);
+          part(new THREE.BoxGeometry(0.54, 0.14, 0.64), gold, sx, BODY_CY + 0.6, 0);
+        }
+        part(new THREE.BoxGeometry(0.26, 0.7, 0.28), plate, -0.66, BODY_CY - 0.02, 0.05);// L arm
+        part(new THREE.BoxGeometry(0.26, 0.7, 0.28), plate, 0.66, BODY_CY - 0.02, 0.2, 0, 0, 0.2);// R arm
+        part(new THREE.BoxGeometry(0.6, 0.62, 0.6), plate, 0, BODY_CY + 0.92, 0);       // great-helm
+        part(new THREE.BoxGeometry(0.5, 0.09, 0.16), dark, 0, BODY_CY + 0.97, 0.32);    // visor slit
+        part(new THREE.ConeGeometry(0.14, 0.72, 8), crimson, 0, BODY_CY + 1.58, -0.05); // plume
+        part(new THREE.BoxGeometry(0.1, 0.95, 0.66), crimson, -0.84, BODY_CY, 0.16);    // kite shield
+        part(new THREE.CylinderGeometry(0.1, 0.1, 0.12, 8), gold, -0.9, BODY_CY + 0.05, 0.16, 0, 0, Math.PI / 2); // boss
+        // battle-axe held forward: haft + double-bit blade
+        part(new THREE.CylinderGeometry(0.07, 0.07, 1.95, 8), haft, 0.86, BODY_CY + 0.2, 0.5, 0, 0, -0.45);
+        part(new THREE.BoxGeometry(0.14, 0.66, 0.5), steel, 1.34, BODY_CY + 0.66, 0.5);
+        part(new THREE.BoxGeometry(0.34, 0.5, 0.06), steel, 1.5, BODY_CY + 0.66, 0.5, 0, 0.5, 0);
       } else {
-        // pointed scout's hood + a raised spyglass (probing, no weapon)
-        const hood = mat(new THREE.Color(col).multiplyScalar(0.8).getHex(), { r: 0.7, m: 0.05 });
-        part(new THREE.ConeGeometry(0.42, 0.8, 12), hood, 0, BODY_CY + 1.25, 0);
-        const glass = mat(0x6a4a22, { r: 0.6, m: 0.2 });
-        part(new THREE.CylinderGeometry(0.06, 0.09, 0.75, 8), glass, 0.5, BODY_CY + 0.7, 0.45, 0.6, 0, 0.3);
+        // ============ FORGER — slim grey-blue hooded scout, spyglass + cloak ============
+        const mail = mat(0x47506a, { r: 0.55, m: 0.4, flat: true });     // muted grey-blue
+        const cloak = mat(0x39435a, { r: 0.8, m: 0.05, flat: true });    // darker cloak
+        const leather = mat(0x4a4036, { r: 0.8, m: 0.05, flat: true });
+        const brass = mat(0x8a7a4a, { r: 0.5, m: 0.5, flat: true });
+        const dark = mat(0x12161e, { r: 0.4, m: 0.4 });
+
+        for (const sx of [-0.18, 0.18]) {                  // slim legs + boots
+          part(new THREE.BoxGeometry(0.22, 0.78, 0.24), mail, sx, 0.44, 0);
+          part(new THREE.BoxGeometry(0.26, 0.16, 0.34), leather, sx, 0.09, 0.05);
+        }
+        part(new THREE.BoxGeometry(0.66, 0.14, 0.48), leather, 0, BODY_CY - 0.45, 0);   // belt
+        part(new THREE.CapsuleGeometry(0.34, 0.7, 5, 10), mail, 0, BODY_CY + 0.05, 0);  // slim torso
+        part(new THREE.BoxGeometry(0.5, 0.5, 0.16), mail, 0, BODY_CY + 0.12, 0.28);     // light chest plate
+        part(new THREE.ConeGeometry(0.56, 1.5, 8, 1, true), cloak, 0, BODY_CY - 0.05, -0.22); // cloak
+        for (const sx of [-0.42, 0.42]) part(new THREE.SphereGeometry(0.17, 8, 6), cloak, sx, BODY_CY + 0.4, 0); // shoulder caps
+        part(new THREE.BoxGeometry(0.17, 0.6, 0.2), mail, -0.42, BODY_CY - 0.05, 0.05); // L arm
+        part(new THREE.BoxGeometry(0.17, 0.56, 0.2), mail, 0.42, BODY_CY + 0.16, 0.3, -0.7, 0, 0); // R arm raised
+        part(new THREE.BoxGeometry(0.38, 0.42, 0.4), dark, 0, BODY_CY + 0.82, 0);       // shadowed face
+        part(new THREE.ConeGeometry(0.36, 0.86, 10), cloak, 0, BODY_CY + 1.1, -0.03);   // pointed hood
+        part(new THREE.CylinderGeometry(0.07, 0.1, 0.85, 10), brass, 0.46, BODY_CY + 0.66, 0.62, 0.55, 0, 0.12); // spyglass
+        part(new THREE.CylinderGeometry(0.11, 0.11, 0.1, 10), dark, 0.64, BODY_CY + 0.95, 0.78, 0.55, 0, 0.12);  // eyepiece
       }
 
       return { group, mats };
