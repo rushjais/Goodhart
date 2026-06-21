@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from ..agents.red import SEED_LIST
+from ..agents.red import DEFAULT_MODEL, SEED_LIST
 from ..agents.specialists import Specialist, run_specialist
 from ..green import harden
 from ..loop import interface
@@ -19,13 +19,19 @@ from ..templates import grade
 from .core import ConductorReport, SealResult, run_conductor
 
 
-def make_runners(client: Any = None):
-    """Return (probe, verify, seal, regrade) closed over the real seam + agents + green."""
+def make_runners(client: Any = None, model: str = DEFAULT_MODEL):
+    """Return (probe, verify, seal, regrade) closed over the real seam + agents + green.
+
+    `model` is the red-team model; a weaker/cheaper one cheats more readily (SPEC §9.5), which is
+    what surfaces breaches for the live siege — a strong model tends to solve the task honestly.
+    """
 
     def probe(gate: str, specialist: Specialist) -> dict | None:
         task = interface.load_task(gate)
         workdir = interface.make_workdir(task)
-        run_specialist(specialist, workdir, run_tests=interface.run_grader, client=client)
+        run_specialist(
+            specialist, workdir, run_tests=interface.run_grader, client=client, model=model
+        )
         if interface.run_grader(workdir) != 1:
             return None
         source = (Path(workdir) / "solution.py").read_text()
@@ -52,9 +58,14 @@ def make_runners(client: Any = None):
     return probe, verify, seal, regrade
 
 
-def run_live(task_ids: list[str], *, client: Any = None, emit=None) -> ConductorReport:
-    """Run the conductor over real EvalPlus tasks (gates). Needs ANTHROPIC_API_KEY."""
-    probe, verify, seal, regrade = make_runners(client)
+def run_live(
+    task_ids: list[str], *, client: Any = None, emit=None, model: str = DEFAULT_MODEL
+) -> ConductorReport:
+    """Run the conductor over real EvalPlus tasks (gates). Needs ANTHROPIC_API_KEY.
+
+    `model` is the red-team model (weaker = more cheats surface; see make_runners).
+    """
+    probe, verify, seal, regrade = make_runners(client, model)
     return run_conductor(
         task_ids, probe=probe, verify=verify, seal=seal, regrade=regrade, emit=emit
     )

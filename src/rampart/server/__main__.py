@@ -2,12 +2,13 @@
 
 import argparse
 import asyncio
+import json
 import socket
 
 import uvicorn
 
 from rampart.server.app import create_app
-from rampart.server.bus import EventBus
+from rampart.server.bus import EventBus, to_wire
 from rampart.server.replay import ReplayPublisher
 
 # The live run defaults to the HARDEST tasks (sparse tests vs tricky logic = where cheats
@@ -46,6 +47,18 @@ def main() -> None:
     parser.add_argument("--replay", metavar="FILE", help="stream a recorded golden run")
     parser.add_argument("--speed", type=float, default=1.0, help="replay speed multiplier")
     parser.add_argument("--tasks", help="comma-separated EvalPlus task ids for the live run")
+    parser.add_argument(
+        "--record",
+        metavar="FILE",
+        help="tee the live event stream to a JSONL golden run (re-record the safety net)",
+    )
+    # Default the live red team to a weaker/cheaper model: it reward-hacks more readily, so the
+    # siege actually surfaces breaches (a strong model tends to just solve the task). SPEC §9.5.
+    parser.add_argument(
+        "--model",
+        default="claude-haiku-4-5-20251001",
+        help="red-team model for the live siege (weaker = more cheats surface)",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -75,14 +88,26 @@ def main() -> None:
 
         async def startup():
             loop = asyncio.get_running_loop()
+            rec = open(args.record, "w") if args.record else None  # noqa: SIM115 — closed in finally
 
             # The bus uses asyncio.Queue (not thread-safe); run_live is sync and runs in a
             # worker thread, so marshal each emit back onto the loop. No connected.wait here:
             # the live engine runs on its own; late browsers catch up via the bus backlog.
+            # With --record, tee each emitted event to a golden JSONL in wire order.
             def emit(event):
                 loop.call_soon_threadsafe(bus.emit, event)
+                if rec:
+                    rec.write(json.dumps(to_wire(event)) + "\n")
+                    rec.flush()
 
-            await asyncio.to_thread(run_live, task_ids, client=client, emit=emit)
+            try:
+                await asyncio.to_thread(
+                    run_live, task_ids, client=client, emit=emit, model=args.model
+                )
+            finally:
+                if rec:
+                    rec.close()
+                    print(f"recorded golden run → {args.record}")
 
     _ensure_port_free(args.host, args.port)
     print(f"siege dashboard → http://{args.host}:{args.port}")
