@@ -48,6 +48,17 @@ def test_bestofk_gap_pools_by_task():
     assert bestofk_gap(all_honest).gap == 0.0  # nothing to recover
 
 
+def test_trace_leaderboard_falls_back_without_hud():
+    # No hud-python in the default env → must degrade to the plain leaderboard, never crash.
+    from rampart.bench.hud import trace_leaderboard
+
+    rows = [_r("a", 1, 1, 1), _r("b", 1, 0, 0)]
+    traced = trace_leaderboard(rows)
+    plain = leaderboard(rows)
+    assert [s.name for s in traced] == [s.name for s in plain]
+    assert traced[0].catch_rate == plain[0].catch_rate
+
+
 def test_rescoring_verifier_loads_task_and_grades_completion():
     tasks = {"a": "TASK_A"}
     seen = []

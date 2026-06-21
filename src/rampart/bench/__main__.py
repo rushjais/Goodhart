@@ -22,6 +22,11 @@ def main() -> None:
         action="store_true",
         help="also score the LLM-as-judge (re-scores completions; needs ANTHROPIC_API_KEY)",
     )
+    ap.add_argument(
+        "--hud",
+        action="store_true",
+        help="log the run as a HUD trace/eval (needs hud-python; uploads if HUD_API_KEY set)",
+    )
     args = ap.parse_args()
 
     rollouts = load_jsonl(args.data)
@@ -35,7 +40,12 @@ def main() -> None:
 
         verifiers.insert(1, ("llm-judge", judge_verifier()))
 
-    rows = leaderboard(rollouts, verifiers)
+    if args.hud:
+        from .hud import trace_leaderboard
+
+        rows = trace_leaderboard(rollouts, verifiers)
+    else:
+        rows = leaderboard(rollouts, verifiers)
     n_ex = rows[0].n_exploits
     print(f"verifier-safety leaderboard — {len(rollouts)} completions, {n_ex} exploits\n")
     print(f"  {'verifier':10}{'catch':>8}{'false-accept':>14}{'honest-pass':>13}{'agreement':>11}")
