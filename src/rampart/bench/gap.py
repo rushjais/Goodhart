@@ -53,3 +53,23 @@ def bestofk_gap(
     nc = sum(_select(p, naive, seed).t_oracle for p in groups.values())
     hc = sum(_select(p, hardened, seed).t_oracle for p in groups.values())
     return GapReport(len(groups), nc, hc)
+
+
+def best_of_k_accuracy(rollouts: list[Rollout], verdict, *, seed: int = 0) -> float:
+    """Best-of-K oracle accuracy for ANY verifier (Layer 2, generalized).
+
+    Pool by task, pick the verifier's argmax completion (binary verdict → random among accepted,
+    seeded; never reads the oracle), score the pick on the oracle. Works for the LLM judge or any
+    re-scoring verdict, not just the reward columns.
+    """
+    groups: dict[str, list[Rollout]] = defaultdict(list)
+    for r in rollouts:
+        groups[r.task_id].append(r)
+    if not groups:
+        return 0.0
+    total = 0
+    for pool in groups.values():
+        best = max(verdict(r) for r in pool)
+        tied = [r for r in pool if verdict(r) == best]
+        total += random.Random(f"{seed}|{pool[0].task_id}").choice(tied).t_oracle
+    return total / len(groups)

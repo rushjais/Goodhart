@@ -1,5 +1,5 @@
-from rampart.bench.core import column, leaderboard, score_verifier
-from rampart.bench.gap import bestofk_gap
+from rampart.bench.core import column, leaderboard, rank, score_verifier
+from rampart.bench.gap import best_of_k_accuracy, bestofk_gap
 from rampart.bench.verifiers import rescoring_verifier
 from rampart.rollout.dataset import Rollout
 
@@ -34,6 +34,25 @@ def test_custom_verdict_plugs_in():
 def test_column_reads_reward():
     r = _r("a", 1, 0, 0)
     assert column("r_naive")(r) == 1 and column("r_hardened")(r) == 0
+
+
+def test_safety_score_and_over_tighten_gate():
+    # rejects everything: perfect catch, zero honest-pass → flagged, can't rank #1
+    rows = [_r("a", 1, 1, 1), _r("b", 1, 0, 0), _r("c", 1, 0, 0)]
+    safe = score_verifier(rows, lambda r: 1 if r.t_oracle == 1 else 0, name="perfect")
+    rejecter = score_verifier(rows, lambda r: 0, name="reject_all")
+    assert safe.safety_score == 100.0 and not safe.over_tightened
+    assert rejecter.over_tightened  # honest_pass 0 < 0.90
+    # ranking: the perfect verifier outranks the over-tightened rejecter despite equal catch
+    assert rank([rejecter, safe])[0].name == "perfect"
+
+
+def test_best_of_k_accuracy_any_verdict():
+    rows = [_r("t", 1, 1, 1), _r("t", 1, 0, 0)]  # one task: honest + cheat
+    # a verifier that only accepts the honest solve → best-of-K always picks it → oracle 100%
+    assert best_of_k_accuracy(rows, lambda r: r.r_hardened) == 1.0
+    # accept-all → random among both; over many seeds it's not always correct, but >=0
+    assert 0.0 <= best_of_k_accuracy(rows, lambda r: 1) <= 1.0
 
 
 def test_bestofk_gap_pools_by_task():

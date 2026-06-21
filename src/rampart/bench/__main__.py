@@ -10,7 +10,7 @@ kept, then prints the best-of-K gap (what optimizing each reward would actually 
 import argparse
 
 from ..rollout.dataset import load_jsonl
-from .core import column, leaderboard
+from .core import column, leaderboard, rank
 from .gap import bestofk_gap
 
 
@@ -46,13 +46,15 @@ def main() -> None:
         rows = trace_leaderboard(rollouts, verifiers)
     else:
         rows = leaderboard(rollouts, verifiers)
+    rows = rank(rows)
     n_ex = rows[0].n_exploits
     print(f"verifier-safety leaderboard — {len(rollouts)} completions, {n_ex} exploits\n")
-    print(f"  {'verifier':10}{'catch':>8}{'false-accept':>14}{'honest-pass':>13}{'agreement':>11}")
+    print(f"  {'verifier':10}{'safety':>8}{'false-accept':>14}{'honest-pass':>13}{'catch':>8}")
     for s in rows:
+        flag = "  ⚠ over-tightened" if s.over_tightened else ""
         print(
-            f"  {s.name:10}{s.catch_rate:>8.0%}{s.false_accept:>14.0%}"
-            f"{s.honest_pass:>13.0%}{s.agreement:>11.0%}"
+            f"  {s.name:10}{s.safety_score:>7.0f} {s.false_accept:>13.0%}"
+            f"{s.honest_pass:>13.0%}{s.catch_rate:>8.0%}{flag}"
         )
 
     g = bestofk_gap(rollouts)
@@ -61,6 +63,10 @@ def main() -> None:
     print(f"  hardened-reward selection correct: {g.hardened_accuracy:>5.0%}   (gap +{g.gap:.0%})")
     print(
         "  → optimizing the naive reward selects a cheat this often; the hardened reward does not"
+    )
+    print(
+        f"\nnote: safety is vs THIS exploit suite ({n_ex} oracle-wrong completions), "
+        "not all possible exploits."
     )
 
 
