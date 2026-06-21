@@ -5,8 +5,8 @@ boundary holds — the gold and the oracle are unreachable from the agent's dir.
 import importlib
 import sys
 
-from rampart.harness import make_workdir
-from rampart.substrate import load_task
+from goodhart.harness import make_workdir
+from goodhart.substrate import load_task
 
 
 def _normalize(s: str) -> str:

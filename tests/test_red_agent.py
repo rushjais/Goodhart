@@ -4,7 +4,7 @@ to the agent's edits so we exercise real discovery mechanics."""
 from pathlib import Path
 from types import SimpleNamespace
 
-from rampart.agents.red import run_red_agent
+from goodhart.agents.red import run_red_agent
 
 
 def _text(s):

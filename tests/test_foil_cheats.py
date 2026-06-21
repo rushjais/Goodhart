@@ -1,9 +1,9 @@
 """The symmetric grader foil: each cheat fails the verifier it targets, by construction."""
 
-from rampart.baselines import foil_cheats, injection_cheat
-from rampart.grader.spec import Grader
-from rampart.substrate import Task
-from rampart.templates import grade
+from goodhart.baselines import foil_cheats, injection_cheat
+from goodhart.grader.spec import Grader
+from goodhart.substrate import Task
+from goodhart.templates import grade
 
 
 def _task() -> Task:

@@ -4,8 +4,8 @@ from pathlib import Path
 
 from starlette.testclient import TestClient
 
-from rampart.server.app import create_app
-from rampart.server.bus import EventBus
+from goodhart.server.app import create_app
+from goodhart.server.bus import EventBus
 
 DASHBOARD = Path(__file__).resolve().parents[1] / "dashboard" / "index.html"
 SEAM2_TAGS = {

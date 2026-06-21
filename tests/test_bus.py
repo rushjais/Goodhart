@@ -2,8 +2,8 @@
 
 import asyncio
 
-from rampart.server import fakes
-from rampart.server.bus import EventBus, from_wire, to_wire
+from goodhart.server import fakes
+from goodhart.server.bus import EventBus, from_wire, to_wire
 
 
 def test_to_wire_carries_the_verbatim_type_tag_and_fields():

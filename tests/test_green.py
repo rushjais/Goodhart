@@ -2,9 +2,9 @@
 
 from types import SimpleNamespace
 
-from rampart.green import harden
-from rampart.substrate import Task
-from rampart.templates import grade
+from goodhart.green import harden
+from goodhart.substrate import Task
+from goodhart.templates import grade
 
 
 def _text(s):

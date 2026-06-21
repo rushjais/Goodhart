@@ -3,8 +3,8 @@
 The whole loop is implemented; the seam re-exports Track A's impls as the single entrypoint.
 """
 
-from rampart import events, gate, grader, harness, metrics, oracle, substrate, templates
-from rampart.loop import interface
+from goodhart import events, gate, grader, harness, metrics, oracle, substrate, templates
+from goodhart.loop import interface
 
 
 def test_seam1_delegates_to_real_impls():

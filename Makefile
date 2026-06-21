@@ -20,12 +20,12 @@ install:
 
 # Run the loop with the event backend + serve the dashboard (filled in at Milestone 4).
 dev:
-	uv run python -m rampart.server
+	uv run python -m goodhart.server
 
 # Replay the recorded golden run — the stage safety net.
 demo:
-	uv run python -m rampart.server --replay golden_run.jsonl
+	uv run python -m goodhart.server --replay golden_run.jsonl
 
 # Verifier-safety leaderboard, seeded so it renders immediately → http://localhost:8100/board
 leaderboard:
-	uv run python -m rampart.server.leaderboard_main --seed --port 8100
+	uv run python -m goodhart.server.leaderboard_main --seed --port 8100

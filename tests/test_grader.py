@@ -5,9 +5,9 @@ These tests are the real enforcement of the grader contract.
 
 import pytest
 
-from rampart.grader import run_grader
-from rampart.harness import make_workdir
-from rampart.substrate import load_task
+from goodhart.grader import run_grader
+from goodhart.harness import make_workdir
+from goodhart.substrate import load_task
 
 # A *correct* solution that also opens a socket — used to prove the network block:
 # with sockets disabled the call raises -> the test errors -> R=0; otherwise R=1.

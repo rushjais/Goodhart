@@ -2,10 +2,10 @@
 
 import json
 
-from rampart.flywheel import FlywheelConfig, run_flywheel
-from rampart.rollout import mock_scorers
-from rampart.rollout.models import Model
-from rampart.substrate import Task
+from goodhart.flywheel import FlywheelConfig, run_flywheel
+from goodhart.rollout import mock_scorers
+from goodhart.rollout.models import Model
+from goodhart.substrate import Task
 
 
 def _tasks(n):

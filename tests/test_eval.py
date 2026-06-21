@@ -1,9 +1,9 @@
 """Held-out eval (⑤ measurement): task split + solve/cheat rates via the rollout harness."""
 
-from rampart.rollout import mock_scorers
-from rampart.rollout.models import Model
-from rampart.substrate import Task
-from rampart.train import held_out_eval, split_tasks
+from goodhart.rollout import mock_scorers
+from goodhart.rollout.models import Model
+from goodhart.substrate import Task
+from goodhart.train import held_out_eval, split_tasks
 
 
 def _tasks(n):

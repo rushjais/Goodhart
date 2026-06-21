@@ -58,7 +58,7 @@ tier_a.json
 capability_run.json
 
 # PDFs (planning/submission docs)
-rampart-*.pdf
+goodhart-*.pdf
 
 # Local working docs (per-user, not shared)
 PLAN.md

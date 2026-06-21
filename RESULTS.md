@@ -22,7 +22,7 @@ leakiness is a published field fact; only the held-out slice and the attacker ar
 ### Reproduce (breach rate)
 
 ```
-ANTHROPIC_API_KEY=…  python -m rampart.breadth --source discovered --hardest 30 --workers 8
+ANTHROPIC_API_KEY=…  python -m goodhart.breadth --source discovered --hardest 30 --workers 8
 ```
 
 `--hardest` selects by an objective proxy (`len(canonical_solution) / len(base_input)`), not by
@@ -32,7 +32,7 @@ breach yield. The run is non-deterministic (the agent is an LLM), so the exact c
 ### Reproduce (Tier-A consequence magnitude)
 
 ```
-ANTHROPIC_API_KEY=…  python -m rampart.consequence --source discovered --hardest 30 --workers 8 --emit-tier-a
+ANTHROPIC_API_KEY=…  python -m goodhart.consequence --source discovered --hardest 30 --workers 8 --emit-tier-a
 ```
 
 Writes `tier_a.json` (`source: "discovered"`). Caveat: harness-tamper breaches collapse to one

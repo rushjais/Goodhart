@@ -14,9 +14,9 @@ breach source.
 
 ## Files this part OWNS (only these are created/edited here)
 
-- `src/rampart/report/__init__.py` (new)
-- `src/rampart/report/card.py` (new) — the `ReportCard` dataclass + builder + renderers
-- `src/rampart/report/__main__.py` (new) — CLI: run the loop on an env → write JSON + standalone HTML
+- `src/goodhart/report/__init__.py` (new)
+- `src/goodhart/report/card.py` (new) — the `ReportCard` dataclass + builder + renderers
+- `src/goodhart/report/__main__.py` (new) — CLI: run the loop on an env → write JSON + standalone HTML
 - `tests/test_report.py` (new)
 - Runtime outputs (not checked in): `runs/report_<env>.json`, `runs/report_<env>.html`
 
@@ -38,7 +38,7 @@ edit `dashboard/index.html`.
    (reward points), and 3–5 example cheats from the per-task `TaskResult` breaches.
 3. **`to_json(card) -> dict`** and **`render_html(card) -> str`** (a self-contained HTML string —
    inline CSS, no build step; clone the visual tone of the existing dashboard but as its own file).
-4. **CLI** `python -m rampart.report --source seed --hardest 5 --out runs/report`:
+4. **CLI** `python -m goodhart.report --source seed --hardest 5 --out runs/report`:
    call `breadth.run_breadth(...)` (seed source = deterministic, no LLM) → `measure_consequence(...)`
    → `build_card` → write `<out>.json` + `<out>.html`. A `--source discovered` path (live red team)
    is optional and additive.
@@ -56,7 +56,7 @@ edit `dashboard/index.html`.
    `BreadthReport` + `ConsequenceReport`; assert before < after, honest-pass present, examples
    carry passed-grader/failed-oracle, JSON round-trips, HTML renders non-empty.
 2. `make check` green.
-3. `python -m rampart.report --source seed --hardest 5 --out runs/report` → open `runs/report.html`
+3. `python -m goodhart.report --source seed --hardest 5 --out runs/report` → open `runs/report.html`
    in a browser; confirm before→after, honest-pass, hit-rate, consequence, and example cheats show.
 
 ## Handoff / integration (after both parts land — a 1-line step, not parallel work)

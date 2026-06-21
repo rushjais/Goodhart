@@ -1,7 +1,7 @@
 """B.4 — the conductor's four levers, tested with injected fakes (no LLM, deterministic)."""
 
-from rampart.agents.specialists import SAPPER, TAXONOMY, Specialist
-from rampart.conductor import SealResult, run_conductor
+from goodhart.agents.specialists import SAPPER, TAXONOMY, Specialist
+from goodhart.conductor import SealResult, run_conductor
 
 
 def _cand(tag="x"):

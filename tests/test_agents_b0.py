@@ -1,7 +1,7 @@
 """B.0 — confirm Track B can build against the locked seams, and the dev stubs behave."""
 
-from rampart.agents import _stubs
-from rampart.loop import interface
+from goodhart.agents import _stubs
+from goodhart.loop import interface
 
 
 def test_seam1_contract_is_importable():

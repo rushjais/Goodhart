@@ -1,7 +1,7 @@
-from rampart.bench.core import column, leaderboard, rank, score_verifier
-from rampart.bench.gap import best_of_k_accuracy, bestofk_gap
-from rampart.bench.verifiers import rescoring_verifier
-from rampart.rollout.dataset import Rollout
+from goodhart.bench.core import column, leaderboard, rank, score_verifier
+from goodhart.bench.gap import best_of_k_accuracy, bestofk_gap
+from goodhart.bench.verifiers import rescoring_verifier
+from goodhart.rollout.dataset import Rollout
 
 
 def _r(tid: str, rn: int, rh: int, to: int) -> Rollout:
@@ -69,7 +69,7 @@ def test_bestofk_gap_pools_by_task():
 
 def test_trace_leaderboard_falls_back_without_hud():
     # No hud-python in the default env → must degrade to the plain leaderboard, never crash.
-    from rampart.bench.hud import trace_leaderboard
+    from goodhart.bench.hud import trace_leaderboard
 
     rows = [_r("a", 1, 1, 1), _r("b", 1, 0, 0)]
     traced = trace_leaderboard(rows)

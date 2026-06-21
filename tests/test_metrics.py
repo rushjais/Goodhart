@@ -4,11 +4,11 @@ with honest-pass preserved, and the train/held-out separation is enforced (not c
 
 import pytest
 
-from rampart.grader import Grader
-from rampart.metrics import agreement, honest_pass, run_m1
-from rampart.metrics.loop import TASK_ID, choose_patch
-from rampart.substrate import load_task
-from rampart.templates import PRISTINE_HELDOUT, apply_patch
+from goodhart.grader import Grader
+from goodhart.metrics import agreement, honest_pass, run_m1
+from goodhart.metrics.loop import TASK_ID, choose_patch
+from goodhart.substrate import load_task
+from goodhart.templates import PRISTINE_HELDOUT, apply_patch
 
 
 @pytest.fixture(scope="module")
@@ -73,8 +73,8 @@ def test_agreement_seam_before_and_after(task, report):
 
 
 def test_baseline_agreement_is_the_genuine_naive_before_and_one_source():
-    from rampart import metrics
-    from rampart.loop import interface
+    from goodhart import metrics
+    from goodhart.loop import interface
 
     # Single source of truth: the conductor reaches it through loop.interface (not submodules).
     assert interface.baseline_agreement is metrics.baseline_agreement

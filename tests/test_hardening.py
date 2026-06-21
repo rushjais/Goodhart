@@ -5,10 +5,10 @@ These tests are the real enforcement of step 6/7 and the honest-pass guardrail.
 
 import pytest
 
-from rampart.gate import regression_gate
-from rampart.grader import Grader
-from rampart.substrate import load_task
-from rampart.templates import PRISTINE_HELDOUT, apply_patch, grade
+from goodhart.gate import regression_gate
+from goodhart.grader import Grader
+from goodhart.substrate import load_task
+from goodhart.templates import PRISTINE_HELDOUT, apply_patch, grade
 
 # The confirmed natural leak: weakened boundary `<=` instead of `<`.
 _BUGGY_BODY = (

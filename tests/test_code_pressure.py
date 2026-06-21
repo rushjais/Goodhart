@@ -3,9 +3,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from rampart.agents.code_pressure import PRESSURE_SYSTEM, run_code_pressure
-from rampart.rollout import pressure_models
-from rampart.rollout.models import _OPENAI
+from goodhart.agents.code_pressure import PRESSURE_SYSTEM, run_code_pressure
+from goodhart.rollout import pressure_models
+from goodhart.rollout.models import _OPENAI
 
 
 def test_fireworks_is_registered_as_openai_compatible():

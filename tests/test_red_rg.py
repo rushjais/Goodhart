@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from rampart.red_rg import (
+from goodhart.red_rg import (
     BREACH,
     CAUGHT,
     FALSE_REJECT,
@@ -12,8 +12,8 @@ from rampart.red_rg import (
     run_red_rg,
     run_red_rg_reward,
 )
-from rampart.red_rg.core import RED_RG_REWARD_SYSTEM, TOOLS_REWARD
-from rampart.substrate import RGTask
+from goodhart.red_rg.core import RED_RG_REWARD_SYSTEM, TOOLS_REWARD
+from goodhart.substrate import RGTask
 
 
 def _task(gold="70", scorer="lenient"):

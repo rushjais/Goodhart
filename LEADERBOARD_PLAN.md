@@ -7,7 +7,7 @@ reward (naive / hardened / LLM-judge) by a `safety_score` (balanced accuracy, ga
 plus false-accept, honest-pass, and best-of-K. The next step turns this from a local CLI table into
 a **hosted, multi-tenant leaderboard**: anyone evaluates their RL environment locally, submits the
 result, gets a shareable link to their **personal breakdown**, and their env is placed on a **live
-global leaderboard of all evaluated RL envs**. This is the "platform" framing — RAMPART becomes a
+global leaderboard of all evaluated RL envs**. This is the "platform" framing — Goodhart becomes a
 tool RL people use, not just a demo.
 
 **Architecture choice (decided): self-serve eval, server only stores + ranks + displays.** The
@@ -48,7 +48,7 @@ the `bench/` metrics (ours) via their stable public exports — **no edits to `b
 ```
  submitter (local)                         leaderboard server (hosted)            browser
  ─────────────────                         ───────────────────────────            ───────
- python -m rampart.bench.submit            POST /api/submit  ──► store (sqlite)    GET /board
+ python -m goodhart.bench.submit            POST /api/submit  ──► store (sqlite)    GET /board
    --data runs/myenv.jsonl                 returns {id, url}                       GET /env/{id}
    --name "my-coding-env"   ───────────►   GET /api/leaderboard ◄── ranked rows    (poll every 4s)
    --url https://board...                  GET /api/env/{id}    ◄── one breakdown
@@ -56,7 +56,7 @@ the `bench/` metrics (ours) via their stable public exports — **no edits to `b
     prints the returned link)                                                      + personal page
 ```
 
-## 1. Data model — `src/rampart/server/store.py` (new, stdlib sqlite3)
+## 1. Data model — `src/goodhart/server/store.py` (new, stdlib sqlite3)
 
 One table, one row per submission (snapshots; resubmitting creates a new row, leaderboard shows the
 best per `env_name`).
@@ -79,10 +79,10 @@ Functions: `init_db(path)`, `insert(sub) -> id`, `get(id) -> dict | None`,
 `leaderboard(limit=100, sort="gameable") -> list[dict]` (best row per `env_name`; default ordered by
 `headline_false_accept` desc — most-gameable first; `sort="safety"` orders by `headline_safety` desc
 as the secondary within-substrate view). DB path from
-`RAMPART_BOARD_DB` env var, default `runs/leaderboard.db`. `init_db` is idempotent (CREATE IF NOT
+`GOODHART_BOARD_DB` env var, default `runs/leaderboard.db`. `init_db` is idempotent (CREATE IF NOT
 EXISTS), called at app startup.
 
-## 2. Submission schema — pydantic models in `src/rampart/server/leaderboard.py` (new)
+## 2. Submission schema — pydantic models in `src/goodhart/server/leaderboard.py` (new)
 
 ```
 class VerifierRow(BaseModel):     # one reward's metrics (from VerifierScore)
@@ -112,7 +112,7 @@ Validation: non-empty `env_name`; metrics clamped to sane ranges; `verifiers` mu
 named `naive` (the headline). Reject malformed with 422 (pydantic does this). `examples` capped
 server-side (e.g. ≤8) and truncated for display.
 
-## 3. API + page server — `src/rampart/server/leaderboard.py` (new FastAPI app, separate from siege)
+## 3. API + page server — `src/goodhart/server/leaderboard.py` (new FastAPI app, separate from siege)
 
 `create_leaderboard_app(db_path) -> FastAPI` with:
 - `POST /api/submit` — validate `Submission` (self-reported), derive `headline_*` from the `naive`
@@ -150,18 +150,18 @@ server-side (e.g. ≤8) and truncated for display.
 
 // GET /api/env/{unknown} → 404 {"detail": "submission not found"}
 ```
-Run it: `python -m rampart.server.leaderboard_main --port 8100 --seed` → board + 3 seeded envs at
+Run it: `python -m goodhart.server.leaderboard_main --port 8100 --seed` → board + 3 seeded envs at
 `http://localhost:8100/api/leaderboard`. `/board` and `/env/{id}` serve `dashboard/leaderboard.html`
 (a placeholder until the frontend lands).
 
 Kept **separate** from `server/app.py` (the siege app keeps its bus/websocket/lifespan untouched).
-Entry point: `src/rampart/server/leaderboard_main.py` → `python -m rampart.server.leaderboard_main
+Entry point: `src/goodhart/server/leaderboard_main.py` → `python -m goodhart.server.leaderboard_main
 --port 8100 [--db runs/leaderboard.db]`, mirroring `server/__main__.py`'s `_ensure_port_free` +
 `uvicorn.run` pattern.
 
-## 4. CLI submission — `src/rampart/bench/submit.py` (new, own entry; avoids the contested `__main__.py`)
+## 4. CLI submission — `src/goodhart/bench/submit.py` (new, own entry; avoids the contested `__main__.py`)
 
-`python -m rampart.bench.submit --data runs/myenv.jsonl --name "my-env" --url https://board... [--judge] [--verified]`
+`python -m goodhart.bench.submit --data runs/myenv.jsonl --name "my-env" --url https://board... [--judge] [--verified]`
 - Loads the rollout JSONL (`load_jsonl`), builds verifiers (`column("r_naive")`,
   `column("r_hardened")`, optional `judge_verifier()`), scores via `score_verifier`, computes
   `best_of_k_accuracy` per verifier, infers `substrate` from the first `task_id`.
@@ -193,7 +193,7 @@ Reuse the existing dashboard's fonts/colors for visual consistency with the sieg
 
 ## 6. Hosting / demo
 
-- Local: `python -m rampart.server.leaderboard_main --port 8100`; persistence = the SQLite file
+- Local: `python -m goodhart.server.leaderboard_main --port 8100`; persistence = the SQLite file
   (survives restarts within the demo). Add `runs/leaderboard.db` to `.gitignore`.
 - Public link for the demo: front it with a tunnel (`cloudflared tunnel --url http://localhost:8100`
   or ngrok) so `/env/{id}` links are openable from any browser. Document the one command.
@@ -215,10 +215,10 @@ Reuse the existing dashboard's fonts/colors for visual consistency with the sieg
 
 | File | New/Edit | Purpose |
 |---|---|---|
-| `src/rampart/server/store.py` | new | sqlite persistence |
-| `src/rampart/server/leaderboard.py` | new | FastAPI app: API + page routes + schema |
-| `src/rampart/server/leaderboard_main.py` | new | `python -m` entry (uvicorn + port guard) |
-| `src/rampart/bench/submit.py` | new | CLI: compute metrics + examples locally + POST (`--verified`) |
+| `src/goodhart/server/store.py` | new | sqlite persistence |
+| `src/goodhart/server/leaderboard.py` | new | FastAPI app: API + page routes + schema |
+| `src/goodhart/server/leaderboard_main.py` | new | `python -m` entry (uvicorn + port guard) |
+| `src/goodhart/bench/submit.py` | new | CLI: compute metrics + examples locally + POST (`--verified`) |
 | `dashboard/leaderboard.html` | new | global board (default most-gameable) + per-env breakdown w/ examples |
 | `tests/test_leaderboard.py` | new | TestClient: submit→rank→detail, 404, ordering, verified recompute |
 | `.gitignore` | edit | ignore `runs/leaderboard.db` |
@@ -259,7 +259,7 @@ Deferred to v2: verifying *custom* substrates (needs their oracle) and anti-spam
    gameable) shows it ranked → `GET /api/env/{id}` returns the breakdown incl. example rows →
    unknown id 404s → a more-gameable env ranks ABOVE a hardened one on the default axis → a
    `/api/submit/verified` POST recomputes `t_oracle` deterministically and lands with `verified=1`.
-2. Manual end-to-end: start `leaderboard_main` locally; `python -m rampart.bench.submit --data
+2. Manual end-to-end: start `leaderboard_main` locally; `python -m goodhart.bench.submit --data
    <a real rollout JSONL> --name demo-env --url http://localhost:8100`; open the printed
    `/env/{id}` and `/board` in a browser; resubmit with better numbers and confirm the row updates.
 3. Tunnel smoke: run the `cloudflared`/ngrok command, open the public `/env/{id}` from a phone.
@@ -272,4 +272,4 @@ Deferred to v2: verifying *custom* substrates (needs their oracle) and anti-spam
   `bench/__init__.py`. The verified tier additionally calls `rollout.scorers.real_scorers` /
   `rg_real_scorers` server-side. No `bench/` edits needed (new files only).
 - `server/` and `dashboard/` are Track C (Rushil) — give him a heads-up; the new files are additive
-  and don't change the siege app, but they live in his areas. Real paths: `src/rampart/server/`.
+  and don't change the siege app, but they live in his areas. Real paths: `src/goodhart/server/`.

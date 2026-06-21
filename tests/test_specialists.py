@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from rampart.agents.specialists import (
+from goodhart.agents.specialists import (
     BY_NAME,
     FORGER,
     SAPPER,

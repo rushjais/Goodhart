@@ -1,6 +1,6 @@
 """B.5 — dumb-fuzzer baseline + the engine number (targeted vs brute force)."""
 
-from rampart.baselines import engine_number, run_fuzzer
+from goodhart.baselines import engine_number, run_fuzzer
 
 
 def test_fuzzer_is_deterministic_with_seed():

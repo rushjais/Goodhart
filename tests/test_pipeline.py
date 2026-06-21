@@ -1,5 +1,5 @@
-from rampart.pipeline import EnvAdapter, run_pipeline
-from rampart.rollout.models import Model
+from goodhart.pipeline import EnvAdapter, run_pipeline
+from goodhart.rollout.models import Model
 
 
 class _Task:

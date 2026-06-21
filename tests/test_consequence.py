@@ -4,8 +4,8 @@ robustness_update events the dashboard's Tier A slot consumes.
 
 import json
 
-from rampart.breadth.loop import BreadthReport, TaskResult
-from rampart.consequence import (
+from goodhart.breadth.loop import BreadthReport, TaskResult
+from goodhart.consequence import (
     as_robustness_updates,
     measure_consequence,
     run_consequence,

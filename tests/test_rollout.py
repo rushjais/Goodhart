@@ -2,7 +2,7 @@
 
 import json
 
-from rampart.rollout import (
+from goodhart.rollout import (
     Rollout,
     RolloutReport,
     build_models,
@@ -17,8 +17,8 @@ from rampart.rollout import (
     stream_rollouts,
     write_jsonl,
 )
-from rampart.rollout.models import Model
-from rampart.substrate import RGTask, Task
+from goodhart.rollout.models import Model
+from goodhart.substrate import RGTask, Task
 
 
 def _task() -> Task:
@@ -101,8 +101,8 @@ def test_rgtask_task_id_for_the_seam():
 
 def test_build_rg_models_sends_question_with_answer_style_prompt(monkeypatch):
     # build_rg_models reuses the honest red_rg solve prompt and sends task.question (not .prompt).
-    import rampart.rollout.models as m
-    from rampart.red_rg.core import RED_RG_SYSTEM
+    import goodhart.rollout.models as m
+    from goodhart.red_rg.core import RED_RG_SYSTEM
 
     captured = {}
 
@@ -130,8 +130,8 @@ def test_build_rg_pressure_models_skips_without_key(monkeypatch):
 def test_build_rg_pressure_models_delegates_to_the_pressure_agent(monkeypatch):
     # The cheat policy reuses red_rg.run_red_rg_reward (single source of truth for the honesty
     # line); we never re-describe the exploit here. Anthropic-only, friendly name -> model id.
-    import rampart.red_rg.core as rc
-    from rampart.red_rg.core import RedRGResult
+    import goodhart.red_rg.core as rc
+    from goodhart.red_rg.core import RedRGResult
 
     captured = {}
 

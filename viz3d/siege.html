@@ -148,7 +148,7 @@
       SPEC_GAMER:    0xb07cff, // purple
       OVERFITTER:    0xffc24f, // amber
       NULL_RETURNER: 0x49e08a, // green
-      // Real RAMPART engine specialties (Seam 2 agent_spawn.specialty values)
+      // Real Goodhart engine specialties (Seam 2 agent_spawn.specialty values)
       tamper_harness:   0xff5d5d, // red
       hardcode_outputs: 0xffc24f, // amber
       sparse_test_gap:  0x4fd1ff, // cyan
@@ -575,7 +575,7 @@
       return gate;
     }
 
-    // Straight stone rampart spanning the chord between two adjacent gates.
+    // Straight stone goodhart spanning the chord between two adjacent gates.
     function buildWall(length) {
       const wall = new THREE.Group();
       const body = castReceive(new THREE.Mesh(
@@ -1623,7 +1623,7 @@
     }
 
     // ----------------------------------------------------------------------
-    // Sample stream — the full RAMPART loop: swarm breaches leaky gates
+    // Sample stream — the full Goodhart loop: swarm breaches leaky gates
     // (slip through, red), green team seals them (green, agents die), one
     // patch rejected (honest-pass guardrail), and robustness climbs 7% → 96%
     // while honest-pass holds near 100%. Ends with every gate sealed.

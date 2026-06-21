@@ -22,12 +22,12 @@ proves honest-pass is enforced.
 
 ## Files this part MUST NOT touch (Part A / other owners)
 
-`src/rampart/report/**`, `tests/test_report.py` (Part A); `bench/` internals; the eval-honesty core
+`src/goodhart/report/**`, `tests/test_report.py` (Part A); `bench/` internals; the eval-honesty core
 (`grader/ oracle/ metrics/ templates/` — Rayan) beyond reading outputs.
 
 ## Tasks
 
-1. **Verify the live end-to-end path on hardest tasks.** `python -m rampart.server` (live) →
+1. **Verify the live end-to-end path on hardest tasks.** `python -m goodhart.server` (live) →
    `run_live(hardest tasks)` → `bus.emit` → `/ws` → siege. Confirmed importable/signature-compatible
    already; now run it and watch a real **breach → patch → gauge-climb** animate. Flag/fix any stall
    (per-task timeout, a task that yields no breach, empty robustness updates). Keep `--replay` as the
@@ -52,9 +52,9 @@ proves honest-pass is enforced.
 
 ## Verification
 
-1. **Live:** `python -m rampart.server` on hardest tasks → in the browser, watch a real
+1. **Live:** `python -m goodhart.server` on hardest tasks → in the browser, watch a real
    breach→patch→climb; no stalls; gauge ends high with honest-pass at 100%.
-2. **Replay:** `python -m rampart.server --replay golden_run.jsonl` shows the same arc **including a
+2. **Replay:** `python -m goodhart.server --replay golden_run.jsonl` shows the same arc **including a
    `patch_rejected` friendly-fire moment** and the baseline→climb gauge.
 3. `make check` green (incl. any updated replay/dashboard fixtures).
 

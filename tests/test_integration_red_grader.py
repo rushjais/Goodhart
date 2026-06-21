@@ -8,8 +8,8 @@ the red agent and the live grader integrate through Seam 1.
 
 from types import SimpleNamespace
 
-from rampart.agents.red import run_red_agent
-from rampart.loop import interface
+from goodhart.agents.red import run_red_agent
+from goodhart.loop import interface
 
 
 def _text(s):

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- RAMPART verifier-safety leaderboard — single file, no build step.
+<!-- Goodhart verifier-safety leaderboard — single file, no build step.
      Two views switched by URL path:
        /board       → global ranked table, polls every 4s
        /env/{id}    → per-env breakdown: verifier comparison, best-of-K gap, example rows
@@ -224,7 +224,7 @@
 <header>
   <div class="brand">
     <h1>GOODHART</h1>
-    <div class="sub" id="header-sub">RAMPART hardening reports — how gameable is each RL reward, and how much hardening fixes it</div>
+    <div class="sub" id="header-sub">Goodhart hardening reports — how gameable is each RL reward, and how much hardening fixes it</div>
   </div>
   <div id="back-link-container" class="back-link" style="display:none">
     <a href="/board">← all environments</a>
@@ -271,7 +271,7 @@ let _pollTimer = null;
 function renderBoard() {
   document.getElementById('back-link-container').style.display = 'none';
   document.getElementById('header-sub').textContent =
-    'RAMPART hardening reports — how gameable is each RL reward, and how much hardening fixes it';
+    'Goodhart hardening reports — how gameable is each RL reward, and how much hardening fixes it';
   app.innerHTML = `
     <div class="board-wrap">
       <div class="card"><div id="board-table-container"><div class="status-msg">loading…</div></div></div>

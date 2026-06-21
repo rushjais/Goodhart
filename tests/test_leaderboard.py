@@ -1,7 +1,7 @@
 from starlette.testclient import TestClient
 
-from rampart.server.leaderboard import create_leaderboard_app
-from rampart.server.seed import seed_board
+from goodhart.server.leaderboard import create_leaderboard_app
+from goodhart.server.seed import seed_board
 
 
 def _sub(env_name, naive_fa, hardened_fa=0.0):
@@ -109,7 +109,7 @@ def test_board_page_serves_real_html(tmp_path):
 
 def test_verified_evalplus_recomputes_and_marks_verified(tmp_path):
     """Server recomputes scores from raw completions; verified=True appears in /api/env/{id}."""
-    from rampart.substrate import load_task
+    from goodhart.substrate import load_task
 
     gold = load_task("HumanEval/0")
     good_completion = gold.prompt + gold.canonical_solution

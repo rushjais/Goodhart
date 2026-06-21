@@ -10,16 +10,16 @@ Reused unchanged from the code-grader loop: `grade`, `apply_patch`, `regression_
 `agreement`, `honest_pass`, `is_breach`. Only the patch *target* (parse-tightening) is new.
 """
 
-from rampart.grader.spec import Grader
-from rampart.loop.interface import (
+from goodhart.grader.spec import Grader
+from goodhart.loop.interface import (
     agreement,
     apply_patch,
     honest_pass,
     is_breach,
     regression_gate,
 )
-from rampart.substrate import RGTask, load_rg_subset, rg_oracle
-from rampart.templates import REJECT_MULTIPLE, REQUIRE_CUE, REQUIRE_DELIMITED, grade
+from goodhart.substrate import RGTask, load_rg_subset, rg_oracle
+from goodhart.templates import REJECT_MULTIPLE, REQUIRE_CUE, REQUIRE_DELIMITED, grade
 
 DATASET = "gsm_symbolic"
 

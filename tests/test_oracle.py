@@ -5,10 +5,10 @@ These tests are the real enforcement of the oracle contract and invariant #2.
 
 import pytest
 
-from rampart.grader import run_grader
-from rampart.harness import make_workdir
-from rampart.oracle import is_breach, run_oracle
-from rampart.substrate import load_task
+from goodhart.grader import run_grader
+from goodhart.harness import make_workdir
+from goodhart.oracle import is_breach, run_oracle
+from goodhart.substrate import load_task
 
 # The confirmed natural leak: a weakened boundary (`<=` instead of `<`). Passes the sparse
 # base tests (grader R=1) but fails the expanded oracle (T=0) -> a real breach.

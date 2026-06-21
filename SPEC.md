@@ -1,4 +1,4 @@
-# SPEC.md — RAMPART
+# SPEC.md — Goodhart
 
 The destination. `CLAUDE.md` is how we build; this is what we're building.
 
@@ -14,7 +14,7 @@ grader became — measured against held-out ground truth.
 
 "You can improve a model at anything you can verify" — but only if the verifier is honest.
 Auto-generating RL environments is now cheap; **verifier quality is the bottleneck.** A weak
-reward function teaches models to cheat at scale. RAMPART automates the thing that today is done
+reward function teaches models to cheat at scale. Goodhart automates the thing that today is done
 by hand: making a verifier un-gameable. HUD's own platform exists to QA tasks for exactly this,
 so we're operating on their core primitive, not adjacent to it.
 

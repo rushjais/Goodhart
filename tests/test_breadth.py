@@ -6,14 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from rampart.agents.specialists import FORGER
-from rampart.breadth import run_breadth, run_task
-from rampart.breadth.__main__ import build_discover_fn
-from rampart.breadth.cheats import forger_cheats
-from rampart.breadth.loop import _split_plus
-from rampart.grader import Grader
-from rampart.substrate import load_subset
-from rampart.templates import grade
+from goodhart.agents.specialists import FORGER
+from goodhart.breadth import run_breadth, run_task
+from goodhart.breadth.__main__ import build_discover_fn
+from goodhart.breadth.cheats import forger_cheats
+from goodhart.breadth.loop import _split_plus
+from goodhart.grader import Grader
+from goodhart.substrate import load_subset
+from goodhart.templates import grade
 
 _N = 4
 
@@ -139,7 +139,7 @@ def test_no_discover_fn_falls_back_to_seed():
 
 
 def test_load_hardest_is_a_deterministic_hard_slice():
-    from rampart.substrate import load_hardest
+    from goodhart.substrate import load_hardest
 
     hard = load_hardest(5)
     assert len(hard) == 5
@@ -155,7 +155,7 @@ def test_model_threads_through_to_the_red_agent():
 
 
 def test_run_breadth_accepts_an_explicit_task_slice():
-    from rampart.substrate import load_hardest
+    from goodhart.substrate import load_hardest
 
     report = run_breadth(workers=2, tasks=load_hardest(2))  # seed source on the hard slice
     assert report.n_loaded == 2

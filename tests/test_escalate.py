@@ -1,9 +1,9 @@
 """A — iterated red<->green escalation, tested with injected attack/seal (no LLM)."""
 
-from rampart.agents.specialists import FORGER
-from rampart.conductor import escalate_gate
-from rampart.green import GreenResult
-from rampart.substrate import Task
+from goodhart.agents.specialists import FORGER
+from goodhart.conductor import escalate_gate
+from goodhart.green import GreenResult
+from goodhart.substrate import Task
 
 ONE_SPECIALIST = (FORGER,)  # round == attack-call count, so schedules are easy to script
 

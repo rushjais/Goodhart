@@ -1,6 +1,6 @@
 """Substrate: load HumanEval/0 and derive expected outputs from the gold."""
 
-from rampart.substrate import expected_outputs, load_task
+from goodhart.substrate import expected_outputs, load_task
 
 
 def test_load_task_exposes_the_five_fields():

@@ -2,8 +2,8 @@
 
 import json
 
-from rampart.rollout import Rollout
-from rampart.train import build_arms, write_sft
+from goodhart.rollout import Rollout
+from goodhart.train import build_arms, write_sft
 
 
 def test_naive_arm_carries_cheats_hardened_arm_does_not():

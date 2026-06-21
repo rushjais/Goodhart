@@ -1,8 +1,8 @@
 """Best-of-K capability gap: selection, the gap aggregation, and the oracle-blind tie-break."""
 
-from rampart.bestofk import compute_gap
-from rampart.bestofk.core import _select
-from rampart.rollout import Rollout
+from goodhart.bestofk import compute_gap
+from goodhart.bestofk.core import _select
+from goodhart.rollout import Rollout
 
 
 def _r(task, model, completion, rn, rh, t):
@@ -60,8 +60,8 @@ def test_groups_split_by_task_and_model():
 
 def test_end_to_end_rg_cheat_and_solve_yield_the_gap():
     """A discovered-style cheat + an honest solve, scored by the REAL RG rewards, show the gap."""
-    from rampart.rollout import Model, generate_rollouts, rg_real_scorers
-    from rampart.substrate import RGTask
+    from goodhart.rollout import Model, generate_rollouts, rg_real_scorers
+    from goodhart.substrate import RGTask
 
     task = RGTask("gsm_symbolic", 42, 0, "q", "70")
     outs = iter(

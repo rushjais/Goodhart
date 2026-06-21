@@ -218,7 +218,7 @@ make install        # uv sync + git hooks
 make check          # ruff + pytest (the deterministic gate)
 
 make demo                               # replay the recorded golden run — no API key → http://localhost:8000
-uv run python -m rampart.server --seed  # deterministic live siege over the hardest tasks — no API key
+uv run python -m goodhart.server --seed  # deterministic live siege over the hardest tasks — no API key
 make dev                                # live LLM run (needs ANTHROPIC_API_KEY)
 ```
 
@@ -241,7 +241,7 @@ golden with `--record golden_run.jsonl`.
 ## Module map
 
 ```
-src/rampart/
+src/goodhart/
 ├─ agents/        red specialists (sapper/forger/edge_slipper) + the agentic attack loop
 ├─ conductor/     core (4 levers, shared memory) · live · seed · escalate
 ├─ green/         the LLM hardening team (harden → validate → gate)
@@ -293,14 +293,14 @@ deterministic seed exploits as a guaranteed cheat class.
 |---|---|
 | `make install` / `make check` / `make fmt` | sync + hooks · ruff + pytest gate · autoformat |
 | `make dev` / `make demo` | live siege · golden-replay siege |
-| `python -m rampart.server [--seed\|--replay FILE] [--tasks IDS] [--record FILE] [--model ID] [--speed F] [--host] [--port]` | the siege server |
-| `python -m rampart.breadth [--hardest N] [--source auto\|seed\|discovered] [--workers] [--model]` | exploitability hit-rate + mean before/after across an env |
-| `python -m rampart.consequence [--hardest N] [--source ...] [--emit-tier-a] [--emit-events]` | reward-points naive vs hardened → `tier_a.json` |
-| `python -m rampart.metrics` | the single-task M1 loop: before / after / honest-pass |
-| `python -m rampart.rollout [--models] [--count] [--k] [--red] [--seed-exploits] [--rg] [--out]` | build the rollout dataset (the seam) |
-| `python -m rampart.bench --data runs/rollouts.jsonl [--judge] [--hud]` | verifier-safety scores + best-of-K gap |
-| `python -m rampart.bestofk --data runs/rollouts.jsonl [--seed] [--show]` | the best-of-K capability gap report |
-| `python -m rampart.red_rg [--count] [--scorer lenient\|first_number] [--pressure]` | red team on the reasoning-gym substrate |
+| `python -m goodhart.server [--seed\|--replay FILE] [--tasks IDS] [--record FILE] [--model ID] [--speed F] [--host] [--port]` | the siege server |
+| `python -m goodhart.breadth [--hardest N] [--source auto\|seed\|discovered] [--workers] [--model]` | exploitability hit-rate + mean before/after across an env |
+| `python -m goodhart.consequence [--hardest N] [--source ...] [--emit-tier-a] [--emit-events]` | reward-points naive vs hardened → `tier_a.json` |
+| `python -m goodhart.metrics` | the single-task M1 loop: before / after / honest-pass |
+| `python -m goodhart.rollout [--models] [--count] [--k] [--red] [--seed-exploits] [--rg] [--out]` | build the rollout dataset (the seam) |
+| `python -m goodhart.bench --data runs/rollouts.jsonl [--judge] [--hud]` | verifier-safety scores + best-of-K gap |
+| `python -m goodhart.bestofk --data runs/rollouts.jsonl [--seed] [--show]` | the best-of-K capability gap report |
+| `python -m goodhart.red_rg [--count] [--scorer lenient\|first_number] [--pressure]` | red team on the reasoning-gym substrate |
 
 ---
 

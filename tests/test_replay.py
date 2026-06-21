@@ -8,8 +8,8 @@ a real before->after climb, honest-pass preserved) rather than equality to any s
 import asyncio
 from pathlib import Path
 
-from rampart.server.bus import EventBus, to_wire
-from rampart.server.replay import ReplayPublisher, load_golden
+from goodhart.server.bus import EventBus, to_wire
+from goodhart.server.replay import ReplayPublisher, load_golden
 
 GOLDEN = Path(__file__).resolve().parents[1] / "golden_run.jsonl"
 

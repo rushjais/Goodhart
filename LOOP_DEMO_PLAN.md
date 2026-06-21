@@ -40,7 +40,7 @@ and the metrics all feed the report and the "after" measurement.
 
 ### 1. The per-env report (the main new deliverable — assembly, not new metrics)
 A shareable "report card" produced from one loop run on an env (a grader over a task set).
-- **New module `src/rampart/report/card.py`**: `ReportCard` dataclass + `build_card(breadth_report,
+- **New module `src/goodhart/report/card.py`**: `ReportCard` dataclass + `build_card(breadth_report,
   consequence_report, examples) -> ReportCard` and `to_json` / `render_html`.
 - **Fields**: env/grader name, substrate, n_tasks; **cheats-blocked before→after** (= agreement
   before/after), **honest_pass**, **exploitability hit-rate** ("M of N graders breachable"),
@@ -61,7 +61,7 @@ A shareable "report card" produced from one loop run on an env (a grader over a 
   owns the dashboard; coordinate the re-record.)
 
 ### 3. Verify the end-to-end LIVE path on hardest tasks
-- `python -m rampart.server` (live) → `run_live(hardest tasks)` → `bus.emit` → `/ws` → siege.
+- `python -m goodhart.server` (live) → `run_live(hardest tasks)` → `bus.emit` → `/ws` → siege.
   Confirmed importable/signature-compatible earlier but not run live end-to-end. Run it, watch the
   siege animate a real breach→patch→gauge-climb, and flag anything that stalls (timeouts, empty
   breaches on a task). Keep the golden replay as the stage fallback.
@@ -96,8 +96,8 @@ A shareable "report card" produced from one loop run on an env (a grader over a 
 
 | File | New/Edit | Purpose |
 |---|---|---|
-| `src/rampart/report/card.py` | new | ReportCard: assemble breadth+consequence+examples → JSON/HTML |
-| `src/rampart/report/__main__.py` | new | CLI: run loop on an env → write report JSON + HTML |
+| `src/goodhart/report/card.py` | new | ReportCard: assemble breadth+consequence+examples → JSON/HTML |
+| `src/goodhart/report/__main__.py` | new | CLI: run loop on an env → write report JSON + HTML |
 | `dashboard/report.html` (or panel in index.html) | new/edit (Track C) | render the report card |
 | `golden_run.jsonl` | re-record (Track C) | hardest tasks + a `patch_rejected` beat |
 | `server/__main__.py` / `tier_a.json` | verify | live run writes the consequence slot |
@@ -109,9 +109,9 @@ A shareable "report card" produced from one loop run on an env (a grader over a 
 
 1. `make check` green incl. a `test_report.py` (deterministic: build a `ReportCard` from a fixed
    `BreadthReport` + `ConsequenceReport`, assert fields + that before<after and honest_pass reported).
-2. Deterministic report: `python -m rampart.report --source seed --hardest 5` → a JSON+HTML card
+2. Deterministic report: `python -m goodhart.report --source seed --hardest 5` → a JSON+HTML card
    with before→after, honest-pass, example cheats, consequence — no API key needed.
-3. Live siege: `python -m rampart.server` on hardest tasks → watch a real breach→patch→climb in the
+3. Live siege: `python -m goodhart.server` on hardest tasks → watch a real breach→patch→climb in the
    browser; then `--replay golden_run.jsonl` shows the same arc incl. the friendly-fire beat.
 
 ## Out of scope (parked)

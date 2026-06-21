@@ -1,6 +1,6 @@
-from rampart.hud_adapter import derive_oracle, hud_adapter, threshold_scorer
-from rampart.pipeline import run_pipeline
-from rampart.rollout.models import Model
+from goodhart.hud_adapter import derive_oracle, hud_adapter, threshold_scorer
+from goodhart.pipeline import run_pipeline
+from goodhart.rollout.models import Model
 
 
 class _Task:

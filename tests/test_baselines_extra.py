@@ -2,8 +2,8 @@
 
 from types import SimpleNamespace
 
-from rampart.baselines import compare_verdicts, llm_grade, raw_llm_breaches
-from rampart.substrate import Task
+from goodhart.baselines import compare_verdicts, llm_grade, raw_llm_breaches
+from goodhart.substrate import Task
 
 
 def _task() -> Task:

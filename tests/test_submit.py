@@ -1,5 +1,5 @@
-from rampart.bench.submit import _substrate, build_payload, build_verified_payload
-from rampart.rollout.dataset import Rollout
+from goodhart.bench.submit import _substrate, build_payload, build_verified_payload
+from goodhart.rollout.dataset import Rollout
 
 
 def _r(tid, rn, rh, to, completion="x"):
