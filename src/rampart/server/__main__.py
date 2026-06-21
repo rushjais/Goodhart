@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import socket
+import sys
 
 import uvicorn
 
@@ -14,16 +15,25 @@ from rampart.server.replay import ReplayPublisher
 # The live run defaults to the HARDEST tasks (sparse tests vs tricky logic = where cheats
 # actually surface), so the siege has real gates to breach. Override with --tasks.
 N_DEMO_GATES = 4
+# Emergency easy-task fallback used ONLY if EvalPlus can't load — the demo downgrades off the
+# hardest tasks, so we shout about it (see _default_task_ids) rather than fail the whole run.
 _FALLBACK_TASKS = ["HumanEval/0", "HumanEval/2", "HumanEval/4", "HumanEval/8"]
 
 
 def _default_task_ids(n: int = N_DEMO_GATES) -> list[str]:
-    """The n hardest EvalPlus task ids; falls back to a fixed set if EvalPlus can't load."""
+    """The n hardest EvalPlus task ids; loudly falls back to an easy set if EvalPlus can't load."""
     try:
         from rampart.substrate import load_hardest
 
         return [t.task_id for t in load_hardest(n)]
-    except Exception:
+    except Exception as exc:  # never silently downgrade the demo to easy tasks
+        print(
+            f"\n!!! EvalPlus failed to load ({type(exc).__name__}: {exc}).\n"
+            f"!!! DOWNGRADING to the easy fallback tasks {_FALLBACK_TASKS} — NOT the hardest set.\n"
+            f"!!! Fix EvalPlus or pass --tasks to run the intended demo.\n",
+            file=sys.stderr,
+            flush=True,
+        )
         return _FALLBACK_TASKS
 
 
