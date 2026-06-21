@@ -8,9 +8,11 @@ from rampart.rollout import (
     build_models,
     generate_rollouts,
     generate_seed_rollouts,
+    load_jsonl,
     mock_scorers,
     real_scorers,
     red_models,
+    stream_rollouts,
     write_jsonl,
 )
 from rampart.rollout.models import Model
@@ -100,6 +102,34 @@ def test_red_models_skip_without_key_and_build_with_key(monkeypatch):
         "ANTHROPIC_API_KEY", "test"
     )  # constructs policies; no API call until sample()
     assert [m.name for m in red_models()] == ["red:forger", "red:edge_slipper"]
+
+
+def test_stream_rollouts_appends_resumes_and_seeds(tmp_path):
+    out = tmp_path / "roll.jsonl"
+    r_naive, r_hardened, t_oracle = mock_scorers()
+    kw = dict(r_naive=r_naive, r_hardened=r_hardened, t_oracle=t_oracle, out_path=out, workers=4)
+
+    # First pass: 1 model, k=2, + seed exploits → 2 model rows + 1 seed row.
+    rep1 = stream_rollouts(
+        [_task()], [Model("m1", lambda t: "HONEST")], k=2, exploit_fn=lambda t: ["CHEAT"], **kw
+    )
+    assert rep1.total == 3
+    assert sum(1 for r in load_jsonl(out) if r.model == "seed-forger") == 1
+
+    # Resume: same k → tops up nothing for m1 (already 2) and skips seed (task has a seed row).
+    rep2 = stream_rollouts(
+        [_task()], [Model("m1", lambda t: "HONEST")], k=2, exploit_fn=lambda t: ["CHEAT"], **kw
+    )
+    assert rep2.total == 3  # no duplication on resume
+
+    # Add a second model → only its rows are appended (m1 stays at 2).
+    rep3 = stream_rollouts(
+        [_task()],
+        [Model("m1", lambda t: "HONEST"), Model("m2", lambda t: "HONEST")],
+        k=2,
+        **kw,
+    )
+    assert rep3.total == 5  # +2 for m2
 
 
 def test_write_jsonl_emits_exactly_the_seam_fields(tmp_path):

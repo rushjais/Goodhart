@@ -7,6 +7,8 @@ from .dataset import (
     RolloutReport,
     generate_rollouts,
     generate_seed_rollouts,
+    load_jsonl,
+    stream_rollouts,
     write_jsonl,
 )
 from .models import DEFAULT_MODELS, Model, build_models, red_models
@@ -20,8 +22,10 @@ __all__ = [
     "build_models",
     "generate_rollouts",
     "generate_seed_rollouts",
+    "load_jsonl",
     "mock_scorers",
     "real_scorers",
     "red_models",
+    "stream_rollouts",
     "write_jsonl",
 ]

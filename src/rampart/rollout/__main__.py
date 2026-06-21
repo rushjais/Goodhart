@@ -9,7 +9,7 @@ Real rewards by default (hardened grader + oracle); --mock swaps in marker-based
 import argparse
 
 from ..substrate import load_hardest, load_subset
-from .dataset import RolloutReport, generate_rollouts, generate_seed_rollouts, write_jsonl
+from .dataset import stream_rollouts
 from .models import DEFAULT_MODELS, build_models, red_models
 from .scorers import mock_scorers, real_scorers
 
@@ -20,6 +20,7 @@ def main() -> None:
     p.add_argument("--count", type=int, default=8, help="number of tasks")
     p.add_argument("--k", type=int, default=4, help="completions per (task, model)")
     p.add_argument("--out", default="runs/rollouts.jsonl")
+    p.add_argument("--workers", type=int, default=8, help="parallel sampling workers")
     p.add_argument("--mock", action="store_true", help="use mock reward scorers")
     p.add_argument("--red", action="store_true", help="add red-team specialists as cheat policies")
     p.add_argument(
@@ -37,21 +38,25 @@ def main() -> None:
     r_naive, r_hardened, t_oracle = mock_scorers() if args.mock else real_scorers()
     tasks = load_hardest(args.count) if args.hardest else load_subset(args.count)
 
-    rollouts = generate_rollouts(
-        tasks, models, r_naive=r_naive, r_hardened=r_hardened, t_oracle=t_oracle, k=args.k
-    )
+    exploit_fn = None
     if args.seed_exploits:
         from ..breadth.cheats import forger_cheats
 
-        rollouts += generate_seed_rollouts(
-            tasks,
-            exploit_fn=forger_cheats,
-            r_naive=r_naive,
-            r_hardened=r_hardened,
-            t_oracle=t_oracle,
-        )
-    path = write_jsonl(rollouts, args.out)
-    report = RolloutReport(rollouts)
+        exploit_fn = forger_cheats
+
+    # Robust: parallel, appends each row (crash-safe), resumable (re-run tops up to k).
+    report = stream_rollouts(
+        tasks,
+        models,
+        r_naive=r_naive,
+        r_hardened=r_hardened,
+        t_oracle=t_oracle,
+        k=args.k,
+        out_path=args.out,
+        workers=args.workers,
+        exploit_fn=exploit_fn,
+    )
+    path = args.out
     print(f"models  : {[m.name for m in models]}{'  +seed-forger' if args.seed_exploits else ''}")
     print(f"rollouts: {report.total}  honest={report.honest}  cheat={report.cheats}")
     print(
