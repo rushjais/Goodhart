@@ -59,6 +59,11 @@ def main() -> None:
         default="claude-haiku-4-5-20251001",
         help="red-team model for the live siege (weaker = more cheats surface)",
     )
+    parser.add_argument(
+        "--seed",
+        action="store_true",
+        help="deterministic seed siege: reliable breach→seal→climb, no API key (the demo path)",
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
@@ -76,6 +81,7 @@ def main() -> None:
         try:
             from rampart.breadth.loop import maybe_client
             from rampart.conductor.live import run_live
+            from rampart.conductor.seed import run_seed
         except ModuleNotFoundError as exc:
             raise SystemExit(
                 f"error: live engine not importable ({exc.name}). This branch needs the engine "
@@ -84,7 +90,7 @@ def main() -> None:
             ) from None
 
         task_ids = args.tasks.split(",") if args.tasks else _default_task_ids()
-        client = maybe_client()
+        client = None if args.seed else maybe_client()
 
         async def startup():
             loop = asyncio.get_running_loop()
@@ -101,9 +107,12 @@ def main() -> None:
                     rec.flush()
 
             try:
-                await asyncio.to_thread(
-                    run_live, task_ids, client=client, emit=emit, model=args.model
-                )
+                if args.seed:  # deterministic siege — reliable breach→seal→climb, no API key
+                    await asyncio.to_thread(run_seed, task_ids, emit=emit)
+                else:
+                    await asyncio.to_thread(
+                        run_live, task_ids, client=client, emit=emit, model=args.model
+                    )
             finally:
                 if rec:
                     rec.close()
