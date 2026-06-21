@@ -79,6 +79,17 @@
   .tb-bar.good { background:var(--good); } .tb-bar.bad { background:var(--bad); }
   .tb-val { font-size:12px; font-variant-numeric:tabular-nums; }
   .tb-src { padding:2px 16px; font-size:10px; color:var(--muted); }
+  /* Best-of-K gap + the vivid naive-cheat vs hardened-solve side-by-side. */
+  .bok-gap { padding:2px 16px 4px; font-size:12px; color:var(--ink); }
+  .bok-gap b { color:var(--good); }
+  .bok-cases { padding:2px 16px 8px; }
+  .bok-case { margin-top:9px; padding-top:7px; border-top:1px solid var(--line); }
+  .bok-case .ch { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px; }
+  .bok-col { font-size:11px; line-height:1.4; margin:2px 0; }
+  .bok-col .tag { font-weight:700; }
+  .bok-col.naive { color:var(--bad); }
+  .bok-col.solve { color:var(--good); }
+  .bok-col.miss { color:var(--warn); }
   /* Tier A reward-points magnitude (the spoken-consequence value) — only when /capability.json has it. */
   .ta-mag { padding:6px 16px 2px; font-size:12.5px; color:var(--ink); line-height:1.5;
             font-variant-numeric:tabular-nums; }
@@ -171,9 +182,11 @@
       <div class="tb-chart" id="ta-chart"><div class="awaiting">awaiting first robustness reading…</div></div>
       <div class="ta-mag" id="ta-mag" hidden></div>
       <div id="tier-b" hidden>
-        <div class="sub-h">Tier B · trained two-model beat<span class="rec">recorded</span></div>
+        <div class="sub-h">Best-of-K capability gap<span class="rec">measured</span></div>
         <div class="tb-chart" id="tb-chart"></div>
+        <div class="bok-gap" id="bok-gap"></div>
         <div class="tb-src" id="tb-src"></div>
+        <div class="bok-cases" id="bok-cases"></div>
       </div>
     </div>
     <h2>Siege log</h2>
@@ -517,8 +530,31 @@ function renderTierB(tb) {
   $("tb-chart").innerHTML = tb.bars
     .map((b) => barRow(b.label, +b.value || 0, b.kind === "hardened" ? "good" : "bad", max))
     .join("");
+  // headline gap number
+  if (typeof tb.gap === "number") {
+    const n = tb.n ? ` &nbsp;(${tb.n} task×model groups)` : "";
+    $("bok-gap").innerHTML =
+      `hardened-reward selection lands on a correct answer ` +
+      `<b>${tb.gap >= 0 ? "+" : ""}${Math.round(tb.gap * 100)}%</b> more often${n}`;
+  }
   $("tb-src").textContent = [tb.metric, tb.source].filter(Boolean).join(" · ");
+  // vivid side-by-side: naive-reward picked a cheat (oracle ✗) vs hardened's pick
+  const cases = Array.isArray(tb.cases) ? tb.cases : [];
+  $("bok-cases").innerHTML = cases
+    .map((c) => {
+      const solved = c.recovered;
+      return (
+        `<div class="bok-case"><div class="ch">${escapeHtml(c.task_id)} · ${escapeHtml(c.model)}</div>` +
+        `<div class="bok-col naive"><span class="tag">naive-reward picked (cheat, oracle ✗):</span> ${escapeHtml(snip(c.naive))}</div>` +
+        `<div class="bok-col ${solved ? "solve" : "miss"}"><span class="tag">hardened-reward picked (${solved ? "solve, oracle ✓" : "still wrong, oracle ✗"}):</span> ${escapeHtml(snip(c.hardened))}</div></div>`
+      );
+    })
+    .join("");
   $("tier-b").hidden = false;
+}
+
+function snip(s) {
+  return (String(s || "").replace(/\s+/g, " ").trim()).slice(0, 130);
 }
 
 function connect() {

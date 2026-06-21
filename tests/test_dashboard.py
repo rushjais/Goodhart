@@ -26,11 +26,25 @@ def test_dashboard_is_served_at_root():
     assert "GOODHART" in resp.text
 
 
-def test_capability_json_404s_until_a_run_is_recorded():
-    # No capability_run.json committed → Tier B slot must stay hidden (404 contract).
+def test_capability_json_404s_when_absent(monkeypatch, tmp_path):
+    # Absent file → Tier B slot stays hidden (404 contract). Hermetic: don't depend on the
+    # gitignored runtime artifact that may exist locally after a real export.
+    from rampart.server import app as appmod
+
+    monkeypatch.setattr(appmod, "_CAPABILITY", tmp_path / "nope.json")
+    with TestClient(create_app(EventBus())) as client:
+        assert client.get("/capability.json").status_code == 404
+
+
+def test_capability_json_served_when_present(monkeypatch, tmp_path):
+    from rampart.server import app as appmod
+
+    f = tmp_path / "capability_run.json"
+    f.write_text('{"bars": [], "gap": 0.0}')
+    monkeypatch.setattr(appmod, "_CAPABILITY", f)
     with TestClient(create_app(EventBus())) as client:
         resp = client.get("/capability.json")
-    assert resp.status_code == 404
+    assert resp.status_code == 200 and resp.json()["gap"] == 0.0
 
 
 def test_dashboard_handles_every_seam2_event_type():
