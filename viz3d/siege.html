@@ -1212,6 +1212,34 @@
     }
 
     // Patch = the green team seals the gate (door shut + portcullis + green).
+    // A defensive turret (primitives only): stone tower + crenellations + a heraldic
+    // pennant + a torch. Children sit at y>=0 so a base-pivot scale.y grows it UPWARD.
+    function buildTurret() {
+      const t = new THREE.Group();
+      const body = castReceive(new THREE.Mesh(
+        new THREE.CylinderGeometry(1.25, 1.45, 3.4, 10), stone(C.stoneMid)));
+      body.position.y = 1.7;
+      t.add(body);
+      const toothMat = stone(C.stoneLight);
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * TWO_PI;
+        const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5), toothMat);
+        tooth.position.set(Math.cos(a) * 1.18, 3.6, Math.sin(a) * 1.18);
+        t.add(tooth);
+      }
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.0, 6), wood());
+      pole.position.y = 4.7;
+      const flag = new THREE.Mesh(
+        new THREE.BoxGeometry(1.1, 0.7, 0.06),
+        new THREE.MeshLambertMaterial({ color: C.banner, emissive: 0x2a0808, emissiveIntensity: 0.25, flatShading: true }));
+      flag.position.set(0.62, 5.2, 0);
+      t.add(pole, flag);
+      const torch = makeTorch(0.9);
+      torch.position.set(0, 3.2, 0.95);
+      t.add(torch);
+      return t;
+    }
+
     function onPatchApplied(ev) {
       const gate = gates[ev.gate];
       if (!gate) return;
@@ -1220,6 +1248,22 @@
       setGateStatus(gate, "sealed");
       const a = gate.userData.angle;
       sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 2.4, Math.sin(a) * RING_R), 0x46e85f);
+
+      // "Defense added" beat: a turret RISES atop the gate as the patch lands.
+      if (!gate.userData.turret) {
+        const turret = buildTurret();
+        turret.position.set(0, 6.3, -0.2); // on the lintel, centered (status flag stays in front/below)
+        turret.scale.y = 0.02;
+        gate.add(turret);
+        gate.userData.turret = turret;
+        addTween({
+          dur: 0.85, ease: easeOutBack,           // satisfying overshoot as it locks in
+          onUpdate: (e) => { turret.scale.y = Math.max(0.02, e); },
+          onComplete: () => { turret.scale.y = 1; },
+        });
+        // gold flare at the new battlement top (torch-flare / flag-raise accent)
+        sealFlash(new THREE.Vector3(Math.cos(a) * RING_R, 9.6, Math.sin(a) * RING_R), 0xd9a531);
+      }
     }
 
     // Patch rejected = over-tightening would break honest work → revert.
