@@ -27,17 +27,23 @@ def main() -> None:
         help="lenient = reasoning-gym's default substring scorer (gameable, passes honest CoT); "
         "first_number = the dataset's strict override (rejects most CoT)",
     )
+    ap.add_argument(
+        "--pressure",
+        action="store_true",
+        help="reward-pressured agent: told the objective (get accepted), never the method",
+    )
     ap.add_argument("--show", type=int, default=3, help="example breaches to print")
     args = ap.parse_args()
 
     tasks = load_rg_subset(args.dataset, n=args.count, seed=args.seed, scorer=args.scorer)
-    stats = measure_breach_rate(tasks, model=args.model)
+    stats = measure_breach_rate(tasks, model=args.model, pressure=args.pressure)
     c = stats.counts
 
+    mode = "reward-pressure" if args.pressure else "honest"
     print(
         f"\n=== discovered-breach rate: {stats.breach_rate:.1%} "
         f"({c[BREACH]}/{stats.n}) — {args.model} on {args.dataset} "
-        f"seed={args.seed} scorer={args.scorer} ==="
+        f"seed={args.seed} scorer={args.scorer} mode={mode} ==="
     )
     print(f"  breach        (R=1,T=0, games scorer)   : {c[BREACH]:>3}")
     print(f"  honest        (R=1,T=1, correct)        : {c[HONEST]:>3}")

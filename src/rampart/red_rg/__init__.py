@@ -11,6 +11,7 @@ from .core import (
     classify,
     measure_breach_rate,
     run_red_rg,
+    run_red_rg_reward,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "classify",
     "measure_breach_rate",
     "run_red_rg",
+    "run_red_rg_reward",
 ]
