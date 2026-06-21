@@ -93,3 +93,15 @@ def test_seed_populates_board(tmp_path):
     rows = c.get("/api/leaderboard").json()["rows"]
     assert len(rows) == n
     assert any(r["verified"] for r in rows)  # canonical seeds are verified
+
+
+def test_board_page_serves_real_html(tmp_path):
+    """GET /board must serve the real leaderboard.html, not the placeholder."""
+    c = _client(tmp_path)
+    r = c.get("/board")
+    assert r.status_code == 200
+    body = r.text
+    # sentinel present in the real file
+    assert 'id="board-table-container"' in body or 'id="detail"' in body or 'id="app"' in body
+    # placeholder must not appear
+    assert "not built yet" not in body
