@@ -428,7 +428,7 @@ const HANDLERS = {
     const g = gateFor(e.gate); g.status = "breached"; g.glow.classList.add("on");
     pin("red");
     showTip(e.gate, `<b>BREACH · ${e.gate}</b><br>${e.cheat_type} — grader ${e.grader_score} / oracle ${e.oracle_score}<br><code>${escapeHtml(e.example)}</code>`);
-    log("breach", `<span class="g">breach</span> ${e.agent} @ ${e.gate} <span class="g">(${e.cheat_type})</span>`);
+    log("breach", `<span class="g">breach</span> ${e.agent} @ ${e.gate} <span class="g">(${e.cheat_type}) — grader ${e.grader_score} → oracle ${e.oracle_score}</span>`);
   },
   patch_applied(e) {
     const g = gateFor(e.gate); g.status = "turreted"; g.glow.classList.remove("on");
