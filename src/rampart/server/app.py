@@ -60,11 +60,15 @@ def create_app(bus: EventBus, startup: Callable[[], Awaitable[None]] | None = No
 
     @app.get("/")
     async def index() -> HTMLResponse:
-        return HTMLResponse(_DASHBOARD.read_text())  # 2D dashboard (tested fallback)
+        return HTMLResponse(_VIZ3D.read_text())  # 3D siege is the demo surface (same /ws stream)
 
     @app.get("/3d")
     async def viz3d() -> HTMLResponse:
-        return HTMLResponse(_VIZ3D.read_text())  # 3D siege, same /ws stream
+        return HTMLResponse(_VIZ3D.read_text())  # explicit 3D alias
+
+    @app.get("/2d")
+    async def viz2d() -> HTMLResponse:
+        return HTMLResponse(_DASHBOARD.read_text())  # 2D fallback (WebGL-glitch insurance)
 
     @app.get("/tier_a.json")
     async def tier_a() -> Response:

@@ -19,11 +19,20 @@ SEAM2_TAGS = {
 }
 
 
-def test_dashboard_is_served_at_root():
+def test_root_serves_the_3d_siege():
+    # The demo surface: / now serves the 3D siege, live-wired to /ws.
     with TestClient(create_app(EventBus())) as client:
         resp = client.get("/")
     assert resp.status_code == 200
-    assert "GOODHART" in resp.text
+    assert "WebSocket" in resp.text and "slotForGate" in resp.text
+
+
+def test_2d_fallback_served():
+    # 2D kept at /2d as a WebGL-glitch fallback.
+    with TestClient(create_app(EventBus())) as client:
+        resp = client.get("/2d")
+    assert resp.status_code == 200
+    assert "Goodhart" in resp.text  # 2D masthead brand
 
 
 def test_capability_json_404s_until_a_run_is_recorded():

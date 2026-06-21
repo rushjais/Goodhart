@@ -120,7 +120,7 @@ def main() -> None:
 
     _ensure_port_free(args.host, args.port)
     base = f"http://{args.host}:{args.port}"
-    print(f"siege dashboard (3D, demo) → {base}/3d     (2D → {base})")
+    print(f"siege dashboard (3D) → {base}     (2D fallback → {base}/2d)")
     uvicorn.run(create_app(bus, startup=startup), host=args.host, port=args.port)
 
 
