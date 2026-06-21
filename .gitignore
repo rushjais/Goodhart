@@ -58,10 +58,7 @@ tier_a.json
 capability_run.json
 
 # PDFs (planning/submission docs)
-rampart-hourly.pdf
-rampart-planning.pdf
-rampart-prompts.pdf
-rampart-submission.pdf
+rampart-*.pdf
 
 # Local working docs (per-user, not shared)
 PLAN.md
