@@ -192,10 +192,10 @@
 <header>
   <div class="brand">
     <h1>GOODHART</h1>
-    <div class="sub" id="header-sub">verifier-safety leaderboard — how safe is each RL environment's reward to train against?</div>
+    <div class="sub" id="header-sub">RAMPART hardening reports — how gameable is each RL reward, and how much hardening fixes it</div>
   </div>
   <div id="back-link-container" class="back-link" style="display:none">
-    <a href="/board">← back to leaderboard</a>
+    <a href="/board">← all environments</a>
   </div>
 </header>
 
@@ -239,7 +239,7 @@ let _pollTimer = null;
 function renderBoard() {
   document.getElementById('back-link-container').style.display = 'none';
   document.getElementById('header-sub').textContent =
-    'verifier-safety leaderboard — how safe is each RL environment\'s reward to train against?';
+    'RAMPART hardening reports — how gameable is each RL reward, and how much hardening fixes it';
   app.innerHTML = `
     <div class="board-wrap">
       <div class="card"><div id="board-table-container"><div class="status-msg">loading…</div></div></div>
@@ -272,7 +272,7 @@ function paintBoard(rows) {
   if (!container) return;
 
   if (rows.length === 0) {
-    container.innerHTML = '<div class="status-msg">no submissions yet — be the first to submit your RL environment.</div>';
+    container.innerHTML = '<div class="status-msg">no environments evaluated yet — run a loop and submit one.</div>';
     _prevIds = new Set();
     return;
   }
@@ -288,7 +288,6 @@ function paintBoard(rows) {
 
   const newIds = new Set(rows.map(r => r.id));
   let html = `<table><thead><tr>
-    <th>#</th>
     <th>environment</th>
     <th>substrate</th>
     <th title="balanced accuracy of the naive verifier, gated by honest-pass — default sort">safety score</th>
@@ -299,7 +298,7 @@ function paintBoard(rows) {
 
   for (const substrate of groupOrder) {
     if (groupOrder.length > 1) {
-      html += `<tr class="group-hdr"><td colspan="7">${esc(substrate)}</td></tr>`;
+      html += `<tr class="group-hdr"><td colspan="6">${esc(substrate)}</td></tr>`;
     }
     for (const r of groups[substrate]) {
       const isNew = !_prevIds.has(r.id);
@@ -313,7 +312,6 @@ function paintBoard(rows) {
         gameableCell = `<span class="gameable-val ${gameabilityClass(fa)}">${pct(fa)}</span>`;
       }
       html += `<tr${rowCls}>
-        <td class="rank-cell">${r.rank}</td>
         <td><a class="env-link" href="/env/${esc(r.id)}">${esc(r.env_name)}</a></td>
         <td>${substrateBadge(r.substrate)}</td>
         <td class="safety-val">${r.safety_score != null ? r.safety_score.toFixed(1) : '—'}</td>
@@ -449,8 +447,6 @@ function paintDetail(d) {
     examplesHtml += '</div></div>';
   }
 
-  const rankStr = d.board_rank ? `#${d.board_rank}` : '—';
-
   app.innerHTML = `
     <div class="detail-wrap" id="detail">
       <h2 style="margin:0 0 4px;font-size:24px">${esc(d.env_name)}</h2>
@@ -460,10 +456,6 @@ function paintDetail(d) {
       </div>
       <div class="headline-sentence">${headlineParts}</div>
       <div class="meta-row">
-        <div class="meta-item">
-          <span class="val">${rankStr}</span>
-          <span class="lbl">board rank</span>
-        </div>
         <div class="meta-item">
           <span class="val">${d.n_completions ?? '—'}</span>
           <span class="lbl">completions</span>
@@ -523,7 +515,7 @@ function paintNotFound(id) {
     <div class="not-found">
       <h2>404</h2>
       <p>submission <code>${esc(id)}</code> not found</p>
-      <a href="/board">← back to leaderboard</a>
+      <a href="/board">← all environments</a>
     </div>`;
 }
 
