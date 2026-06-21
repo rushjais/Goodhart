@@ -20,16 +20,24 @@ def main() -> None:
     )
     ap.add_argument("--dataset", default="gsm_symbolic")
     ap.add_argument("--model", default=DEFAULT_MODEL, help="weaker models cheat more readily")
+    ap.add_argument(
+        "--scorer",
+        choices=("lenient", "first_number"),
+        default="lenient",
+        help="lenient = reasoning-gym's default substring scorer (gameable, passes honest CoT); "
+        "first_number = the dataset's strict override (rejects most CoT)",
+    )
     ap.add_argument("--show", type=int, default=3, help="example breaches to print")
     args = ap.parse_args()
 
-    tasks = load_rg_subset(args.dataset, n=args.count, seed=args.seed)
+    tasks = load_rg_subset(args.dataset, n=args.count, seed=args.seed, scorer=args.scorer)
     stats = measure_breach_rate(tasks, model=args.model)
     c = stats.counts
 
     print(
         f"\n=== discovered-breach rate: {stats.breach_rate:.1%} "
-        f"({c[BREACH]}/{stats.n}) — {args.model} on {args.dataset} seed={args.seed} ==="
+        f"({c[BREACH]}/{stats.n}) — {args.model} on {args.dataset} "
+        f"seed={args.seed} scorer={args.scorer} ==="
     )
     print(f"  breach        (R=1,T=0, games scorer)   : {c[BREACH]:>3}")
     print(f"  honest        (R=1,T=1, correct)        : {c[HONEST]:>3}")

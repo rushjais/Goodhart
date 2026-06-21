@@ -22,14 +22,22 @@ class RGTask:
     index: int  # position within the seeded dataset
     question: str  # the problem text shown to the (red) agent
     gold: str  # the oracle answer, as reasoning-gym reports it (e.g. "70")
+    # Which reasoning-gym scorer is the naive grader:
+    #   "lenient"      -> the DEFAULT substring scorer (gold appears anywhere -> credit);
+    #                     gameable AND passes honest CoT, so the breach dynamic shows.
+    #   "first_number" -> gsm_symbolic's own override (first number == gold); pathologically
+    #                     strict on CoT (rejects ~97% of correct step-by-step answers).
+    scorer: str = "lenient"
 
 
-def load_rg_subset(dataset: str, n: int, seed: int) -> list[RGTask]:
+def load_rg_subset(dataset: str, n: int, seed: int, scorer: str = "lenient") -> list[RGTask]:
     """Load the first `n` reasoning-gym problems for `seed` (generated locally, no network)."""
     from reasoning_gym import create_dataset
 
     ds = create_dataset(dataset, size=n, seed=seed)
-    return [RGTask(dataset, seed, i, ds[i]["question"], str(ds[i]["answer"])) for i in range(n)]
+    return [
+        RGTask(dataset, seed, i, ds[i]["question"], str(ds[i]["answer"]), scorer) for i in range(n)
+    ]
 
 
 def rg_oracle(task: RGTask, answer: str) -> int:
