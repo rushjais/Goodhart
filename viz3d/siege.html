@@ -120,8 +120,28 @@
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(C.bg);
-    scene.fog = new THREE.Fog(C.bg, 58, 150);
+    scene.background = new THREE.Color(0x3a2533);          // warm dusk (hidden behind the sky dome)
+    scene.fog = new THREE.Fog(0x4a3038, 58, 150);          // distance fades into the warm horizon
+
+    // Sunset gradient sky dome — deep orange/rose at the horizon → dusk purple/blue up top.
+    // Cheap: one large BackSide sphere, unlit ShaderMaterial (gradient by world-Y), fog off.
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(400, 32, 15),
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide, depthWrite: false, fog: false,
+        uniforms: {
+          topColor: { value: new THREE.Color(0x2b2340) },     // dusk purple-blue
+          midColor: { value: new THREE.Color(0x7c3a52) },     // rose
+          horizonColor: { value: new THREE.Color(0xc85a2a) }, // sunset orange
+        },
+        vertexShader:
+          "varying vec3 vW; void main(){ vec4 wp = modelMatrix * vec4(position,1.0); vW = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }",
+        fragmentShader:
+          "varying vec3 vW; uniform vec3 topColor, midColor, horizonColor; void main(){ float t = max(0.0, normalize(vW).y); vec3 low = mix(horizonColor, midColor, smoothstep(0.0, 0.16, t)); vec3 c = mix(low, topColor, pow(smoothstep(0.04, 0.55, t), 0.9)); gl_FragColor = vec4(c, 1.0); }",
+      })
+    );
+    sky.frustumCulled = false;
+    scene.add(sky);
 
     // Perspective camera looking down at the set at a slight angle.
     const camera = new THREE.PerspectiveCamera(
@@ -144,7 +164,7 @@
     const hemi = new THREE.HemisphereLight(0x7d6f64, 0x46442e, 1.18);
     scene.add(hemi);
 
-    const key = new THREE.DirectionalLight(0xffb169, 1.55);
+    const key = new THREE.DirectionalLight(0xffa05a, 1.5); // warmer low golden-hour sun
     key.position.set(40, 30, 18); // low dusk sun → long shadows
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -779,6 +799,10 @@
     const gaugeCluster = new THREE.Group();
     gaugeCluster.position.set(0, 21, 0);
     scene.add(gaugeCluster);
+    // Floating ROBUSTNESS/HONEST-PASS panel hidden — narrated verbally + via the #beat
+    // caption instead. animateGauge / robustness_update handling stays intact (updates the
+    // now-invisible meshes harmlessly); only the rendering of the hovering panel is removed.
+    gaugeCluster.visible = false;
 
     const frame = new THREE.Mesh(
       new THREE.BoxGeometry(14.4, 14.9, 0.25),
