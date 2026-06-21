@@ -1,14 +1,19 @@
-"""Rollout layer: sample a policy against the task, score every rollout under naive reward,
-hardened reward, and the oracle → the comprehensive RL dataset + the consequence number."""
+"""Rollout layer (flywheel box ②): sample K completions per task across multiple models, score
+each via injected rewards (naive / hardened / oracle), emit the locked-seam JSONL dataset that
+the best-of-K gap logic consumes."""
 
-from .dataset import Rollout, RolloutReport, generate_rollouts, score_completion, write_jsonl
-from .policy import make_policy
+from .dataset import Rollout, RolloutReport, generate_rollouts, write_jsonl
+from .models import DEFAULT_MODELS, Model, build_models
+from .scorers import mock_scorers, real_scorers
 
 __all__ = [
+    "DEFAULT_MODELS",
+    "Model",
     "Rollout",
     "RolloutReport",
+    "build_models",
     "generate_rollouts",
-    "make_policy",
-    "score_completion",
+    "mock_scorers",
+    "real_scorers",
     "write_jsonl",
 ]

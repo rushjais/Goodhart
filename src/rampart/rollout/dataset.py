@@ -1,35 +1,30 @@
-"""Generate a comprehensive rollout dataset and score every rollout three ways.
+"""The rollout dataset: sample K completions per task across MULTIPLE models, score each via
+injected reward callables, emit the locked-seam JSONL that the best-of-K gap logic consumes.
 
-For each task we use three DISJOINT input sets (mirrors breadth's split → eval honesty #2):
-  base_input    → R_naive     (the leaky reward)
-  harden_inputs → R_hardened  (the hardened reward = pristine base + held-out inputs)
-  oracle_inputs → T_oracle    (the truth, held out from both rewards)
-
-A rollout is one policy attempt at a task. Its label falls out of (R_naive, T_oracle):
-  fail   = didn't even pass the naive reward
-  honest = passed naive AND correct on the oracle
-  cheat  = passed naive BUT wrong on the oracle  ← reward hacking, what the leaky reward pays for
-
-This is the RL training data: filter by reward to build the SFT/RFT set. It also yields the
-consequence number directly — how often each reward pays out for wrong code.
+Locked seam (one row per completion): {task_id, model, completion, r_naive, r_hardened, t_oracle}.
+The loop imports NO grader internals — scorers are injected (see scorers.py). Label falls out of
+(r_naive, t_oracle): fail / honest / cheat (cheat = passed naive but wrong on the oracle).
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 
-from ..grader.spec import Grader
-from ..substrate import Task, expected_outputs
-from ..suite import score_solution
-from ..templates import PRISTINE_HELDOUT, apply_patch, grade
+from .models import Model
+
+Scorer = Callable[[object, str], int]
+
+# The locked seam contract (Advay produces → Rayan's best-of-K consumes). Order matters for clarity.
+SEAM_FIELDS = ("task_id", "model", "completion", "r_naive", "r_hardened", "t_oracle")
 
 
 @dataclass
 class Rollout:
     task_id: str
+    model: str
     completion: str
     r_naive: int  # reward under the leaky (base-test) grader
     r_hardened: int  # reward under the hardened grader
@@ -42,57 +37,35 @@ class Rollout:
         return "honest" if self.t_oracle == 1 else "cheat"
 
 
-def _split_plus(task: Task) -> tuple[list, list]:
-    """Disjoint halves of plus_input (hardening pool, held-out oracle), excluding base cases.
-    Mirrors breadth.loop._split_plus so the grader and oracle never share a case (invariant #2)."""
-    base = {repr(x) for x in task.base_input}
-    seen: set[str] = set()
-    plus_only = []
-    for x in task.plus_input:
-        key = repr(x)
-        if key not in base and key not in seen:
-            seen.add(key)
-            plus_only.append(x)
-    return plus_only[0::2], plus_only[1::2]
-
-
-def score_completion(task: Task, completion: str) -> Rollout:
-    """Score one completion under naive reward, hardened reward, and the oracle."""
-    harden_inputs, oracle_inputs = _split_plus(task)
-    oracle_cases = list(zip(oracle_inputs, expected_outputs(task, oracle_inputs), strict=True))
-    naive = Grader(task)
-    hardened = apply_patch(naive, PRISTINE_HELDOUT, {"held_out_inputs": harden_inputs})
-
-    def safe(fn) -> int:
-        try:
-            return fn()
-        except Exception:
-            return 0
-
-    r_naive = safe(lambda: grade(naive, completion))
-    r_hardened = safe(lambda: grade(hardened, completion))
-    t_oracle = safe(
-        lambda: (
-            1
-            if oracle_cases and score_solution(task.entry_point, completion, oracle_cases) == 1
-            else 0
-        )
-    )
-    return Rollout(task.task_id, completion, r_naive, r_hardened, t_oracle)
-
-
 def generate_rollouts(
-    tasks: list[Task], *, policy: Callable[[Task], str], k: int = 4
+    tasks: list,
+    models: list[Model],
+    *,
+    r_naive: Scorer,
+    r_hardened: Scorer,
+    t_oracle: Scorer,
+    k: int = 4,
 ) -> list[Rollout]:
-    """Sample `k` rollouts per task with `policy` and score each. policy(task) -> solution src."""
+    """Sample k completions per (task, model) and score each with the injected rewards.
+    Every sample and score is guarded so one bad call can't kill the run."""
     rollouts: list[Rollout] = []
     for task in tasks:
-        for _ in range(k):
-            try:
-                completion = policy(task)
-            except Exception:
-                continue
-            rollouts.append(score_completion(task, completion))
+        for model in models:
+            for _ in range(k):
+                try:
+                    completion = model.sample(task)
+                except Exception:
+                    continue
+                rollouts.append(
+                    Rollout(
+                        task_id=task.task_id,
+                        model=model.name,
+                        completion=completion,
+                        r_naive=r_naive(task, completion),
+                        r_hardened=r_hardened(task, completion),
+                        t_oracle=t_oracle(task, completion),
+                    )
+                )
     return rollouts
 
 
@@ -124,10 +97,10 @@ class RolloutReport:
 
 
 def write_jsonl(rollouts: list[Rollout], path: str | Path) -> Path:
-    """Persist the comprehensive dataset, one rollout per line (the SFT/RFT source)."""
+    """Persist the dataset, one row per completion, EXACTLY the seam fields (Rayan's consumer)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for r in rollouts:
-            f.write(json.dumps({**asdict(r), "label": r.label}) + "\n")
+            f.write(json.dumps({field: getattr(r, field) for field in SEAM_FIELDS}) + "\n")
     return path
