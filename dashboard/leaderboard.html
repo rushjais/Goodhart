@@ -86,12 +86,18 @@
     color:var(--muted); border-bottom:none;
   }
 
-  /* ── detail view (full-screen card) ── */
+  /* ── detail view (full-width card, fits one screen) ── */
   .detail-wrap {
-    margin:24px auto; max-width:1000px; padding:30px 36px 40px;
+    margin:18px 26px 22px; padding:24px 30px 26px;
     background:var(--panel); border:1px solid var(--line); border-radius:18px;
-    min-height:calc(100vh - 150px);
+    min-height:calc(100vh - 118px);
   }
+  /* main sections side-by-side so the page fills horizontally, not vertically */
+  .detail-grid {
+    display:grid; grid-template-columns:1.35fr 1fr; gap:20px; align-items:start; margin-top:16px;
+  }
+  .detail-col > .panel-box:first-child { margin-top:0; }
+  @media (max-width:1024px) { .detail-grid { grid-template-columns:1fr; } }
   .headline-sentence {
     font-size:22px; font-weight:700; line-height:1.3; margin:18px 0 6px;
     letter-spacing:-.01em;
@@ -468,7 +474,9 @@ function paintDetail(d) {
         </div>
       </div>
 
-      <div class="panel-box">
+      <div class="detail-grid">
+       <div class="detail-col">
+        <div class="panel-box">
         <div class="section-h">Verifier comparison</div>
         <table class="verifier-table">
           <thead><tr>
@@ -482,11 +490,13 @@ function paintDetail(d) {
           </tr></thead>
           <tbody>${verifierRows}</tbody>
         </table>
+        </div>
+        ${gapHtml}
+       </div>
+       <div class="detail-col">
+        ${examplesHtml}
+       </div>
       </div>
-
-      ${gapHtml}
-
-      ${examplesHtml}
 
       <button class="share-btn" id="share-btn">
         <span>⎘</span> share this link
