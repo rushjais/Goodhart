@@ -24,16 +24,31 @@ def _load(path: str) -> list[Rollout]:
     return rollouts
 
 
+def _prompts_for(rollouts) -> dict[str, str]:
+    """Map each task_id -> its EvalPlus prompt, so SFT arms train on prompt+completion."""
+    from ..substrate import load_task
+
+    out: dict[str, str] = {}
+    for tid in {r.task_id for r in rollouts}:
+        try:
+            out[tid] = load_task(tid).prompt
+        except Exception:
+            out[tid] = ""
+    return out
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="rampart.train")
     p.add_argument("--data", default="runs/rollouts.jsonl")
     p.add_argument("--out-dir", default="runs")
     args = p.parse_args()
 
-    arms = build_arms(_load(args.data))
+    rollouts = _load(args.data)
+    arms = build_arms(rollouts)
+    prompts = _prompts_for(rollouts)  # join task prompts so SFT rows are {prompt, completion}
     print("=== expert-iteration arms (rejection sampling on each reward) ===")
     for arm in arms.values():
-        path = write_sft(arm, f"{args.out_dir}/sft_{arm.name}.jsonl")
+        path = write_sft(arm, f"{args.out_dir}/sft_{arm.name}.jsonl", prompts=prompts)
         print(
             f"  {arm.name:14} size={arm.size:4}  cheat_fraction={arm.cheat_fraction:.0%}  -> {path}"
         )
