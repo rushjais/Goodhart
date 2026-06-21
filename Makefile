@@ -1,4 +1,4 @@
-.PHONY: check fmt lint test install dev demo
+.PHONY: check fmt lint test install dev demo leaderboard
 
 # Deterministic gate — the same thing the Stop hook and pre-commit run.
 check: lint test
@@ -25,3 +25,7 @@ dev:
 # Replay the recorded golden run — the stage safety net.
 demo:
 	uv run python -m rampart.server --replay golden_run.jsonl
+
+# Verifier-safety leaderboard, seeded so it renders immediately → http://localhost:8100/board
+leaderboard:
+	uv run python -m rampart.server.leaderboard_main --seed --port 8100
