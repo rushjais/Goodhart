@@ -119,7 +119,8 @@ def main() -> None:
                     print(f"recorded golden run → {args.record}")
 
     _ensure_port_free(args.host, args.port)
-    print(f"siege dashboard → http://{args.host}:{args.port}")
+    base = f"http://{args.host}:{args.port}"
+    print(f"siege dashboard (3D, demo) → {base}/3d     (2D → {base})")
     uvicorn.run(create_app(bus, startup=startup), host=args.host, port=args.port)
 
 
