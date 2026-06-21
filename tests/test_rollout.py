@@ -6,6 +6,7 @@ from rampart.rollout import (
     Rollout,
     RolloutReport,
     build_models,
+    build_rg_pressure_models,
     generate_rollouts,
     generate_seed_rollouts,
     load_jsonl,
@@ -119,6 +120,32 @@ def test_build_rg_models_sends_question_with_answer_style_prompt(monkeypatch):
     models[0].sample(RGTask("gsm_symbolic", 42, 0, "how many legs?", "70"))
     assert captured["system"] == RED_RG_SYSTEM
     assert captured["sent"] == "how many legs?"  # the question, not a code prompt
+
+
+def test_build_rg_pressure_models_skips_without_key(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    assert build_rg_pressure_models() == []  # graceful skip, mirrors red_models
+
+
+def test_build_rg_pressure_models_delegates_to_the_pressure_agent(monkeypatch):
+    # The cheat policy reuses red_rg.run_red_rg_reward (single source of truth for the honesty
+    # line); we never re-describe the exploit here. Anthropic-only, friendly name -> model id.
+    import rampart.red_rg.core as rc
+    from rampart.red_rg.core import RedRGResult
+
+    captured = {}
+
+    def fake_reward(task, *, client=None, model=None, max_turns=5):
+        captured["model"] = model
+        return RedRGResult(answer="maybe 50, 70, or 90", model=model)
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(rc, "run_red_rg_reward", fake_reward)
+    models = build_rg_pressure_models(["opus", "gpt-4o-mini"])  # gpt skipped (Anthropic-only)
+    assert [m.name for m in models] == ["pressure:opus"]
+    out = models[0].sample(RGTask("gsm_symbolic", 42, 0, "q", "70"))
+    assert out == "maybe 50, 70, or 90"
+    assert captured["model"] == "claude-opus-4-8"  # mapped from the friendly name
 
 
 def test_seed_exploits_inject_a_guaranteed_cheat_class():

@@ -11,7 +11,14 @@ from .dataset import (
     stream_rollouts,
     write_jsonl,
 )
-from .models import DEFAULT_MODELS, Model, build_models, build_rg_models, red_models
+from .models import (
+    DEFAULT_MODELS,
+    Model,
+    build_models,
+    build_rg_models,
+    build_rg_pressure_models,
+    red_models,
+)
 from .scorers import mock_scorers, real_scorers, rg_real_scorers
 
 __all__ = [
@@ -21,6 +28,7 @@ __all__ = [
     "RolloutReport",
     "build_models",
     "build_rg_models",
+    "build_rg_pressure_models",
     "generate_rollouts",
     "generate_seed_rollouts",
     "load_jsonl",

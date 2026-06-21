@@ -2,17 +2,25 @@
 
   python -m rampart.rollout --models opus,sonnet,haiku --count 8 --k 4 --out runs/rollouts.jsonl
   python -m rampart.rollout --mock --models opus,haiku --count 2          # mock rewards
-  python -m rampart.rollout --rg --models opus,sonnet,haiku --count 30    # reasoning-gym
+  python -m rampart.rollout --rg --models opus,sonnet,haiku --count 30          # reasoning-gym
+  python -m rampart.rollout --rg --red --models opus,haiku --count 30 --k 4      # + real cheats
 
 Real EvalPlus rewards by default; --mock swaps marker scorers; --rg switches the whole substrate
-to reasoning-gym (gsm_symbolic): RG tasks, RG answer-style policies, real RG grader/oracle.
+to reasoning-gym (gsm_symbolic): RG tasks, RG answer-style policies, real RG grader/oracle. With
+--rg, --red adds reward-pressured cheat policies so the dataset holds real discovered cheats.
 """
 
 import argparse
 
 from ..substrate import load_hardest, load_rg_subset, load_subset
 from .dataset import stream_rollouts
-from .models import DEFAULT_MODELS, build_models, build_rg_models, red_models
+from .models import (
+    DEFAULT_MODELS,
+    build_models,
+    build_rg_models,
+    build_rg_pressure_models,
+    red_models,
+)
 from .scorers import mock_scorers, real_scorers, rg_real_scorers
 
 
@@ -24,7 +32,11 @@ def main() -> None:
     p.add_argument("--out", default="runs/rollouts.jsonl")
     p.add_argument("--workers", type=int, default=8, help="parallel sampling workers")
     p.add_argument("--mock", action="store_true", help="use mock reward scorers")
-    p.add_argument("--red", action="store_true", help="add red-team specialists as cheat policies")
+    p.add_argument(
+        "--red",
+        action="store_true",
+        help="add cheat policies: red-team specialists, or reward-pressured agents under --rg",
+    )
     p.add_argument(
         "--seed-exploits", action="store_true", help="inject deterministic forger cheats"
     )
@@ -36,6 +48,8 @@ def main() -> None:
 
     if args.rg:
         models = build_rg_models(args.models.split(","))
+        if args.red:  # reward-pressured RG cheat policies alongside the honest samplers
+            models += build_rg_pressure_models(args.models.split(","))
     else:
         models = build_models(args.models.split(","))
         if args.red:

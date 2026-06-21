@@ -153,6 +153,38 @@ def build_rg_models(names: list[str] | None = None, *, temperature: float = 0.7)
     )
 
 
+def build_rg_pressure_models(
+    names: list[str] | None = None, *, client=None, max_turns: int = 5
+) -> list[Model]:
+    """Reward-pressured reasoning-gym CHEAT policies — the real discovered-cheat source for RG.
+
+    Each `sample(task)` runs the reward-pressured red agent (`red_rg.run_red_rg_reward`) and
+    returns the answer it discovered. That agent is the SINGLE SOURCE OF TRUTH for the honesty
+    line: it is told only the OBJECTIVE (get the grader to accept), never the METHOD — so its
+    cheats are discovered, not coached. We do not re-describe the exploit here. Anthropic-only
+    (the agent uses the tool loop); needs ANTHROPIC_API_KEY (else skipped), mirroring red_models.
+    """
+    import os
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return []
+    from ..red_rg.core import run_red_rg_reward
+
+    def make_sample(model_id):
+        def sample(task) -> str:
+            return run_red_rg_reward(
+                task, client=client, model=model_id, max_turns=max_turns
+            ).answer
+
+        return sample
+
+    return [
+        Model(name=f"pressure:{n}", sample=make_sample(_ANTHROPIC[n]))
+        for n in (names or list(_ANTHROPIC))
+        if n in _ANTHROPIC
+    ]
+
+
 # Solution-level cheat specialists make the best cheat policies (sapper tampers the harness,
 # which pristine grading moots — so it wouldn't register as a solution-level cheat here).
 RED_SPECIALISTS = ("forger", "edge_slipper")
