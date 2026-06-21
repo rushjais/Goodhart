@@ -197,38 +197,68 @@ const pct = (x) => Math.round(x * 100) + "%";
   }
 })();
 
-const SLOTS = [220, 420, 620, 820];   // gate x positions, by order of appearance
+const GATE_X0 = 120, GATE_X1 = 880;   // gates spread evenly across this band of the wall
 const SPAWN_Y = 505, FRONT_Y = 468;   // agent rows: muster line, and the wall front
-const gates = {};                      // id -> {x, status, glow, gateEl, crowd}
-const agents = {};                     // id -> {el, x, y, gate}
+const gates = {};                      // id -> {x, status, glow, group, crowd, turret, beacon}
+const gateOrder = [];                  // gate ids in order of appearance
+const agents = {};                     // id -> {el, x, y, gate, spawnX}
 const robustHistory = [];
 let breaches = 0, sealed = 0, softSpot = null;
 
+// Re-space ALL gates evenly whenever a new one appears, so however many gates a run
+// touches (1 or 12) they never overlap. Each gate is a <g> drawn in local coords and
+// positioned by a transform — its turret/beacon (children) and parked agents follow.
+function relayoutGates() {
+  const n = gateOrder.length;
+  gateOrder.forEach((id, i) => {
+    const x = n <= 1 ? (GATE_X0 + GATE_X1) / 2 : GATE_X0 + (GATE_X1 - GATE_X0) * i / (n - 1);
+    gates[id].x = x;
+    gates[id].group.setAttribute("transform", `translate(${x},0)`);
+  });
+  for (const a of Object.values(agents)) {  // keep parked (visible) agents on their gate
+    if (a.gate && gates[a.gate] && a.el.style.opacity !== "0") {
+      a.x = gates[a.gate].x;
+      a.el.style.transform = `translate(${a.x}px,${a.y}px)`;
+    }
+  }
+}
+
 function gateFor(id) {
   if (gates[id]) return gates[id];
-  const x = SLOTS[Object.keys(gates).length % SLOTS.length];
-  const g = document.createElementNS(SVGNS, "g");
-  g.setAttribute("class", "gate");
-  g.innerHTML =
-    `<rect class="gate-glow" x="${x-34}" y="250" width="68" height="180" fill="#ff5d6c" opacity="0"/>
-     <path class="gate-arch" d="M ${x-26} 430 V 320 A 26 26 0 0 1 ${x+26} 320 V 430 Z"/>
-     <text x="${x}" y="448" text-anchor="middle" fill="#56627f" font-size="10">${id}</text>`;
-  $("gates").appendChild(g);
-  return (gates[id] = { x, status: "intact", glow: g.querySelector(".gate-glow"), gateEl: g, crowd: 0 });
+  const group = document.createElementNS(SVGNS, "g");
+  group.setAttribute("class", "gate");
+  group.innerHTML =
+    `<rect class="gate-glow" x="-34" y="250" width="68" height="180" fill="#ff5d6c" opacity="0"/>
+     <path class="gate-arch" d="M -26 430 V 320 A 26 26 0 0 1 26 320 V 430 Z"/>
+     <text x="0" y="448" text-anchor="middle" fill="#56627f" font-size="10">${escapeHtml(id)}</text>`;
+  $("gates").appendChild(group);
+  gates[id] = { x: 0, status: "intact", glow: group.querySelector(".gate-glow"), group, crowd: 0 };
+  gateOrder.push(id);
+  relayoutGates();
+  return gates[id];
 }
 
 function addAgent(id, specialty) {
-  const idx = Object.keys(agents).length;
-  const x = 120 + idx * 76, y = SPAWN_Y;
+  const existing = agents[id];
+  if (existing) {  // a respawn (same specialist, new gate) — revive its token, don't stack
+    existing.gate = null;
+    existing.x = existing.spawnX;
+    existing.y = SPAWN_Y;
+    existing.el.style.opacity = "1";
+    existing.el.style.transform = `translate(${existing.spawnX}px,${SPAWN_Y}px)`;
+    return;
+  }
+  const idx = Object.keys(agents).length;          // one stable slot per distinct specialist
+  const x = 140 + idx * 120;
   const g = document.createElementNS(SVGNS, "g");
   g.setAttribute("class", "agent");
-  g.style.transform = `translate(${x}px,${y}px)`;
+  g.style.transform = `translate(${x}px,${SPAWN_Y}px)`;
   g.innerHTML =
     `<circle class="agent-body" r="11"/>
      <path d="M -7 4 Q 0 -16 7 4 Z" fill="#ff8a93"/>
      <text class="agent-lbl" y="26">${escapeHtml(specialty || id)}</text>`;
   $("agents").appendChild(g);
-  agents[id] = { el: g, x, y, gate: null };
+  agents[id] = { el: g, x, y: SPAWN_Y, gate: null, spawnX: x };
 }
 
 // A quadratic path from (x0,y0)->(x1,y1) whose control point bows the route AROUND any
@@ -278,20 +308,25 @@ function moveAgent(id, gateId) {
   requestAnimationFrame(frame);
 }
 
+function clearBeacon() {
+  const g = softSpot && gates[softSpot];
+  if (g && g.beacon) { g.beacon.remove(); g.beacon = null; }
+}
 function setSoftSpot(gateId) {
   if (softSpot === gateId) return;
+  clearBeacon();
   softSpot = gateId;
-  const b = $("beacons"); b.innerHTML = "";
-  const x = gateFor(gateId).x;
-  const m = document.createElementNS(SVGNS, "g");
+  const g = gateFor(gateId);
+  const m = document.createElementNS(SVGNS, "g");  // local coords — rides the gate's transform
   m.setAttribute("class", "beacon");
   m.innerHTML =
-    `<circle cx="${x}" cy="300" r="15" fill="none" stroke="#ffcf5c" stroke-width="2"/>
-     <path d="M ${x-7} 296 L ${x} 305 L ${x+7} 296" fill="none" stroke="#ffcf5c" stroke-width="2.5"/>`;
-  b.appendChild(m);
+    `<circle cx="0" cy="300" r="15" fill="none" stroke="#ffcf5c" stroke-width="2"/>
+     <path d="M -7 296 L 0 305 L 7 296" fill="none" stroke="#ffcf5c" stroke-width="2.5"/>`;
+  g.group.appendChild(m);
+  g.beacon = m;
 }
 function clearSoftSpot(gateId) {
-  if (softSpot === gateId) { softSpot = null; $("beacons").innerHTML = ""; }
+  if (softSpot === gateId) { clearBeacon(); softSpot = null; }
 }
 
 function pin(kind) {
@@ -301,15 +336,15 @@ function pin(kind) {
 }
 
 function turretOn(gateId, hardened) {
-  const x = gateFor(gateId).x;
-  const t = document.createElementNS(SVGNS, "g");
+  const g = gateFor(gateId);
+  const t = document.createElementNS(SVGNS, "g");  // local coords — child of the gate group
   t.setAttribute("class", "turret");
   t.innerHTML =
-    `<rect x="${x-22}" y="196" width="44" height="40" fill="#16233d" stroke="#37e0a6"/>
-     <rect x="${x-26}" y="186" width="52" height="12" fill="#37e0a6"/>
-     <rect x="${x+14}" y="206" width="22" height="7" fill="#37e0a6"/>` +
-    (hardened ? `<path class="shield" d="M ${x-40} 360 A 44 44 0 0 1 ${x+40} 360"/>` : "");
-  $("turrets").appendChild(t);
+    `<rect x="-22" y="196" width="44" height="40" fill="#16233d" stroke="#37e0a6"/>
+     <rect x="-26" y="186" width="52" height="12" fill="#37e0a6"/>
+     <rect x="14" y="206" width="22" height="7" fill="#37e0a6"/>` +
+    (hardened ? `<path class="shield" d="M -40 360 A 44 44 0 0 1 40 360"/>` : "");
+  g.group.appendChild(t);
   return t;
 }
 
@@ -397,7 +432,7 @@ const HANDLERS = {
   },
   patch_applied(e) {
     const g = gateFor(e.gate); g.status = "turreted"; g.glow.classList.remove("on");
-    g.gateEl.classList.add("hardened");
+    g.group.classList.add("hardened");
     turretOn(e.gate, true); pin("green"); clearSoftSpot(e.gate);
     log("patch", `<span class="g">patch</span> ${e.gate} <span class="g">— ${escapeHtml(e.technique)}</span>`);
   },
